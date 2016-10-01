@@ -1,33 +1,31 @@
 
 /*
-enum WHEEL
-{
+  enum WHEEL
+  {
    LEFT,
    RIGHT,
    BOTH
-};
+  };
 
 */
 
 volatile long int lCounts, rCounts;
 extern char lDir;
 extern char rDir;
- 
+
+void Encoder_begin(int lPin, int rPin);
 void Encoder_wheelTick(WHEEL wheel);
 void Encoder_clearEnc(WHEEL wheel);
 long Encoder_getTicks(WHEEL wheel);
 
 
-void Encoder_begin(int lPin, int rPin)
+void Encoder_begin(int rPin, int lPin)
 {
-  // RedBot only breaks out ten valid pins:
-  //  A0-A5 a.k.a. D14-19 (PCINT 8-13)
-  //  D3 (PCINT 19)
-  //  D9-D11 (PCINT 1-3)
-  // We'll need a whopping case statement to set up the pin change interrupts
-  //  for this; in fact, we'll need two, but I'll abstract it to a function.
-  //  A call to setPinChangeInterrupt() enables pin change interrupts for that
-  //  pin, and pin change interrupts for the group that pin is a part of.
+  pinMode(11, OUTPUT); // For encoder power
+  pinMode(12, OUTPUT); // For encoder power
+  digitalWrite(11, HIGH);
+  digitalWrite(12, HIGH);
+
   pinMode(lPin, INPUT);
   pinMode(rPin, INPUT);
   attachInterrupt(lPin, countL, RISING);
@@ -50,13 +48,13 @@ void countL()
 //  is set by the functions that set the motor direction.
 void Encoder_wheelTick( WHEEL wheel)
 {
-  switch(wheel)
+  switch (wheel)
   {
     case LEFT:
-      lCounts += 1;//(long)lDir;
+      lCounts += (long)lDir; // Changes base on motor direction
       break;
     case RIGHT:
-      rCounts += 1;//(long)rDir;
+      rCounts += (long)rDir; // Changes base on motor direction
       break;
     case BOTH:
       break;
@@ -66,7 +64,7 @@ void Encoder_wheelTick( WHEEL wheel)
 // Public function to clear the encoder counts.
 void Encoder_clearEnc(WHEEL wheel)
 {
-  switch(wheel)
+  switch (wheel)
   {
     case LEFT:
       lCounts = 0;
@@ -84,7 +82,7 @@ void Encoder_clearEnc(WHEEL wheel)
 // Public function to read the encoder counts for a given wheel.
 long Encoder_getTicks(WHEEL wheel)
 {
-  switch(wheel)
+  switch (wheel)
   {
     case LEFT:
       return lCounts;
