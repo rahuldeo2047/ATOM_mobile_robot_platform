@@ -82,7 +82,7 @@ void TaskRobotTest( void *pvParameters );
 void setup() {
 
   // initialize serial communication at 9600 bits per second:
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB, on LEONARDO, MICRO, YUN, and other 32u4 based boards.
@@ -97,7 +97,46 @@ void setup() {
   //Encoder_begin(digitalPinToInterrupt(20),digitalPinToInterrupt(21));
 
   test_robot();
-  test_robot_motors();
+  while (1)
+  {
+    test_robot_motors();
+    test_encoder_reinit();
+    delay(1000);
+  }
+
+  while (1);
+  {
+
+    test_encoder_reinit();
+    Serial.println("<<Reinit>>");
+
+    while (!test_encoder_one_rev(RIGHT, 125, 200))
+    {
+      test_encoder_rev();
+    }
+
+    while (!test_encoder_one_rev(LEFT, 95, 200))
+    {
+      test_encoder_rev();
+    }
+
+    delay(500);
+    //  test_encoder_reinit();
+    //  while(1)
+    //  {
+    //     test_encoder_rev();
+    //  }
+
+  }
+
+
+  //  Serial.println();
+  //  Serial.println("Nav test");
+  //
+  //  robot_setTurn(90.0f);
+  //  robot_run();
+  delay(300);
+  robot_wheel_stop();
 
   /*
 

@@ -28,8 +28,8 @@ void Encoder_begin(int rPin, int lPin)
 
   pinMode(lPin, INPUT);
   pinMode(rPin, INPUT);
-  attachInterrupt(lPin, countL, RISING);
-  attachInterrupt(rPin, countR, RISING);
+  attachInterrupt(lPin, countL, CHANGE);
+  attachInterrupt(rPin, countR, CHANGE);
   lCounts = 0;
   rCounts = 0;
 }
