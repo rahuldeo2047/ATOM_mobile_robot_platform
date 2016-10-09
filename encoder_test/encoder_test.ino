@@ -39,22 +39,22 @@ void robot_wheel(WHEEL wheel, int wheel_speed);
 
 struct AMessage
 {
-    unsigned long ulTickCount;
-    unsigned long ulTickTime;
+  unsigned long ulTickCount;
+  unsigned long ulTickTime;
 } xMessage;
 
 QueueHandle_t xPrintQueue;
 
-              /*
-                DESCRIPTION
-                ====================
-                Reports through serial (57600 baud) the time since
-                a button press (transition from HIGH to LOW).
+/*
+  DESCRIPTION
+  ====================
+  Reports through serial (57600 baud) the time since
+  a button press (transition from HIGH to LOW).
 
-              */
+*/
 
-              // Include the Bounce2 library found here :
-              // https://github.com/thomasfredericks/Bounce-Arduino-Wiring
+// Include the Bounce2 library found here :
+// https://github.com/thomasfredericks/Bounce-Arduino-Wiring
 
 
 
@@ -126,15 +126,17 @@ void loop() {
 
 void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
-  AMessage xMessage;
- 
+  AMessage xMessage2;
+
   for (;;) // A Task shall never return or exit.
   {
-    xQueueReceive( xPrintQueue, &xMessage, portMAX_DELAY );
+    xQueueReceive( xPrintQueue, &xMessage2, portMAX_DELAY );
 
-   Serial.println( xMessage.ulTickTime );
+    Serial.print( xMessage2.ulTickTime );
+    Serial.print(" ");
+    Serial.println( xMessage2.ulTickCount );
 
- //   ulEncoderTickDebounceTime = millis();
+    //   ulEncoderTickDebounceTime = millis();
   }
 
 }
@@ -142,12 +144,15 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
 void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
 
+#define WHEEL_CYCLE_TEST_COUNT (17)
   // Instantiate a Bounce object :
   Bounce debouncer = Bounce();
-  unsigned long ulEncoderTickDebounceTime=0;
-  unsigned long ulDebounceTime=0, ulEncoderTicks=0;
-  AMessage xMessage;
-  
+  unsigned long ulEncoderTickDebounceTime = 0;
+  unsigned long ulDebounceTime = 0, ulEncoderTicks = 0;
+  AMessage xMessage1;
+  byte ucSpeedVar=255;
+  randomSeed(analogRead(0));
+
   // After setting up the button, setup the Bounce instance :
   debouncer.attach(2);
   debouncer.interval(5);
@@ -160,11 +165,29 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     // Call code if Bounce fell (transition from HIGH to LOW) :
     if ( debouncer.fell()  )
     {
-      xMessage.ulTickCount = ulEncoderTicks++;
-      xMessage.ulTickTime = abs(millis() - ulEncoderTickDebounceTime);
+      xMessage1.ulTickCount = ulEncoderTicks++;
+      xMessage1.ulTickTime = abs(millis() - ulEncoderTickDebounceTime);
       ulEncoderTickDebounceTime = millis();
-      xQueueSendToFront( xPrintQueue, &( xMessage ), 0 );
-      
+      xQueueSendToFront( xPrintQueue, &( xMessage1 ), 0 );
+
+      if (ulEncoderTicks >= WHEEL_CYCLE_TEST_COUNT)
+      {
+        //robot_wheel(LEFT, -255);
+        //vTaskDelay(100);
+        
+        robot_wheel(LEFT, 0);
+        
+        vTaskDelay(100);
+        ulEncoderTicks = 0;
+        
+        //robot_wheel(LEFT, 255);
+         
+        //vTaskDelay(1);
+        
+        robot_wheel(LEFT, -255);// random(100, 255));
+      }
+
+
       //robot_wheel(LEFT, 0);
     }
   }
