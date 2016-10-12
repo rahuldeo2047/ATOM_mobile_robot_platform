@@ -200,8 +200,8 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
       //#if (0 == USE_PRINTER_TASK)
       //#endif
-      robot_wheel(LEFT, 0);
-      vTaskDelay(100);
+      //robot_wheel(LEFT, 0);
+      //vTaskDelay(100);
       bRndSpeed = random(bRndSpeed-50, bRndSpeed+50);
       bRndSpeed = bRndSpeed<150 ? 150 : bRndSpeed;
       bRndSpeed = bRndSpeed>255 ? 255 : bRndSpeed;
