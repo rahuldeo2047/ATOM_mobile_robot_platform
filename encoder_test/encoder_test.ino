@@ -32,11 +32,13 @@ enum WHEEL
 #define USE_PRINTER_TASK (1)
 // define two Tasks for DigitalRead & AnalogRead
 void TaskEncoderTicksReadWithDebouncing( void *pvParameters );
-void TaskPrintData( void *pvParameters );
 
 #if (1 == USE_PRINTER_TASK)
-void TaskRobotTest( void *pvParameters );
+void TaskPrintData( void *pvParameters );
 #endif
+
+void TaskRobotTest( void *pvParameters );
+
 
 void robot_wheel(WHEEL wheel, int wheel_speed);
 
@@ -122,7 +124,7 @@ void setup() {
     xReturned &= xTaskCreate(
                    TaskRobotTest
                    ,  (const portCHAR *) "RobotRun"
-                   ,  128  // Stack size
+                   ,  1024  // Stack size
                    ,  NULL
                    ,  2  // Priority
                    ,  NULL );
@@ -131,7 +133,7 @@ void setup() {
     xReturned &= xTaskCreate(
                    TaskPrintData
                    ,  (const portCHAR *) "Printer"
-                   ,  128  // Stack size
+                   ,  1024  // Stack size
                    ,  NULL
                    ,  3  // Priority
                    ,  NULL );
@@ -184,7 +186,7 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
   int iRndSpeed = 0;
   char cPosNeg = 0;
-  AMessage xMessageTick;
+  //AMessage xMessageTick;
   AMessage xMessageTickDir;
 
   long lTicks_l = 0, lTicks_r = 0;
@@ -195,14 +197,16 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
   for (;;) // A Task shall never return or exit.
   {
-    if (xQueueReceive( xTickQueue, &xMessageTick, portMAX_DELAY ))
+    if (xQueueReceive( xTickQueue, &xMessageTickDir, portMAX_DELAY ))
     {
 
-      lTicks_l = xMessageTick.lTickCount_l;
+      lTicks_l = xMessageTickDir.lTickCount_l;
       // ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l;
 
-      xMessageTick.lTickCount_l = xMessageTick.lTickCount_l - lLastTicks_l;
+      xMessageTickDir.lTickCount_l = xMessageTickDir.lTickCount_l - lLastTicks_l;
       // xMessage2.ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l - ulTickDeltaTime_l;
+
+      //xMessageTickDir = xMessageTick;
 
       if ( (lTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0)
       {
@@ -222,10 +226,8 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
         Serial.print("<<>>");
         Serial.println(iRndSpeed);
 
-
-        robot_wheel(LEFT, iRndSpeed , &xMessageTick.cTickDir_l, &xMessageTick.cTickDir_r );
-        xMessageTickDir = xMessageTick;
-        xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 ); // only dirs are valid
+        robot_wheel(LEFT, iRndSpeed , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
+        //xMessageTickDir = xMessageTick;
 
         lLastTicks_l = lTicks_l;
         lLastTicks_r = lTicks_r;
@@ -239,12 +241,18 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
       }
 
-      xQueueSendToFront( xPrintQueue, &( xMessageTick ), 0 );
+      xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
+
+      xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
 
     }
   }
 
 }
+
+
+//Tested for ticks
+//Testing for diff speed
 
 void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
@@ -316,6 +324,11 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     {
       xSample1.cTickDir_l = xMessageTickDir.cTickDir_l;
       xSample1.cTickDir_r = xMessageTickDir.cTickDir_r;
+    }
+    else // Valid for test : Will create problem when real use of direction
+    {
+      xSample1.cTickDir_l = 1;
+      xSample1.cTickDir_r = 1;
     }
 
     //
