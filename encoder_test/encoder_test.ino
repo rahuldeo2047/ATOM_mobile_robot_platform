@@ -39,8 +39,14 @@ void TaskPrintData( void *pvParameters );
 
 void TaskRobotTest( void *pvParameters );
 
+void TaskRobotWheelCtrlTest( void *pvParameters );
 
-void robot_wheel(WHEEL wheel, int wheel_speed);
+
+TaskHandle_t xHandleTaskRobotWheelCtrlTest;
+
+
+
+void robot_wheel(WHEEL wheel, int wheel_speed, char*, char *);
 
 struct AMessage
 {
@@ -53,6 +59,8 @@ struct AMessage
   long lTickCount_r;
   unsigned long ulTickDeltaTime_r;
   unsigned long ulTickTimeStamp_r;
+
+  boolean bResetAll;
 
 } xMessage;
 
@@ -129,6 +137,14 @@ void setup() {
                    ,  2  // Priority
                    ,  NULL );
 
+    xReturned &= xTaskCreate(
+                   TaskRobotWheelCtrlTest
+                   ,  (const portCHAR *) "RobotWheelCtrl"
+                   ,  1024  // Stack size
+                   ,  NULL
+                   ,  2  // Priority
+                   ,  &xHandleTaskRobotWheelCtrlTest );
+
 #if (1 == USE_PRINTER_TASK)
     xReturned &= xTaskCreate(
                    TaskPrintData
@@ -157,43 +173,93 @@ void loop()
 void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
 
-  Serial.println( "TaskPrintData" );
+  //Serial.println( "TaskPrintData" );
   AMessage xMessage3;
 
   for (;;) // A Task shall never return or exit.
   {
     xQueueReceive( xPrintQueue, &xMessage3, portMAX_DELAY );
 
-    Serial.print("t");
+    //Serial.print("t");
+    Serial.print( xMessage3.ulTickTimeStamp_l );
+    Serial.print("\t");
     Serial.print( xMessage3.ulTickDeltaTime_l );
-    Serial.print(",c");
+    Serial.print("\t");
     Serial.println( xMessage3.lTickCount_l );
   }
 
 }
 #endif
 
+#define WHEEL_CYCLE_TEST_SPEED (200)
+#define WHEEL_CYCLE_TEST_MAX_SPEED (255)
+#define WHEEL_CYCLE_TEST_MIN_SPEED (150)
+
+void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // This is a Task.
+{
+
+  //Serial.println( "TaskRobotWheelCtrlTest" );
+  AMessage xMessageTickDir;
+  char dummy;
+  int iRndSpeed = 0;
+  char cPosNeg = 0;
+  boolean bToggleZeroSpeed = true;
+
+
+  for (;;) // A Task shall never return or exit.
+  {
+    iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
+    iRndSpeed = iRndSpeed < WHEEL_CYCLE_TEST_MIN_SPEED ? WHEEL_CYCLE_TEST_MIN_SPEED : iRndSpeed;
+    iRndSpeed = iRndSpeed > WHEEL_CYCLE_TEST_MAX_SPEED ? WHEEL_CYCLE_TEST_MAX_SPEED : iRndSpeed;
+
+    cPosNeg = (char)random(1, 2) == 1 ? 1 : -1;
+    iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
+    //xMessage2.cTickDir_l = cPosNeg;
+
+    robot_wheel(LEFT, iRndSpeed , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
+    //Serial.print("<<>>");
+
+    bToggleZeroSpeed = !bToggleZeroSpeed;
+
+    vTaskSuspend( xHandleTaskRobotWheelCtrlTest);
+    vTaskDelay(100);
+    Serial.print("<<1>> ");
+    Serial.println(iRndSpeed);
+    xMessageTickDir.bResetAll = true;
+    xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
+    // Doing xQueueSendToFrontFromISR(...) && no xMessageTickDir.bResetAll = true;
+    // is forcing it to be used in the next thread.
+
+    //
+  }
+
+}
+
+
 void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
 
 #define WHEEL_CYCLE_TEST_COUNT ( 20)
-#define WHEEL_CYCLE_TEST_SPEED (200)
 
-  Serial.println( "TaskRobotTest" );
+
+  //Serial.println( "TaskRobotTest" );
 
   char dummy;
   robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
 
   int iRndSpeed = 0;
   char cPosNeg = 0;
+  boolean bCheckFirstTick = true;
   //AMessage xMessageTick;
   AMessage xMessageTickDir;
 
   long lTicks_l = 0, lTicks_r = 0;
   long lLastTicks_l = 0, lLastTicks_r = 0;
+  long lFirstTicks_l = 0, lFirstTicks_r = 0;
 
   unsigned long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
   unsigned long ulTickLastDeltaTime_l = 0, ulTickLastDeltaTime_r = 0;
+  unsigned long lFirstDeltaTime_l = 0, lFirstDeltaTime_r = 0;
 
   for (;;) // A Task shall never return or exit.
   {
@@ -203,8 +269,15 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
       lTicks_l = xMessageTickDir.lTickCount_l;
       // ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l;
 
-      xMessageTickDir.lTickCount_l = xMessageTickDir.lTickCount_l - lLastTicks_l;
-      // xMessage2.ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l - ulTickDeltaTime_l;
+      //      if ( true == bCheckFirstTick)
+      //      {
+      //        lFirstTicks_l = xMessageTickDir.lTickCount_l;
+      //        lFirstDeltaTime_l = xMessageTickDir.ulTickDeltaTime_l;
+      //        bCheckFirstTick = false;
+      //      }
+      //
+      //      xMessageTickDir.lTickCount_l = xMessageTickDir.lTickCount_l - lLastTicks_l - lFirstTicks_l;
+      //      xMessageTickDir.ulTickDeltaTime_l = xMessageTickDir.ulTickDeltaTime_l - ulTickDeltaTime_l;
 
       //xMessageTickDir = xMessageTick;
 
@@ -223,25 +296,27 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
         // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
         //xMessage2.cTickDir_l = cPosNeg;
 
-        Serial.print("<<>>");
-        Serial.println(iRndSpeed);
-
-        robot_wheel(LEFT, iRndSpeed , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
+        xMessageTickDir.bResetAll = true;
+        robot_wheel(LEFT, 0 , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
+        Serial.println("[S]");
+        //Serial.println(iRndSpeed);
+        vTaskResume( xHandleTaskRobotWheelCtrlTest);
         //xMessageTickDir = xMessageTick;
 
-        lLastTicks_l = lTicks_l;
-        lLastTicks_r = lTicks_r;
+        lLastTicks_l = 0;
+        lLastTicks_r = 0;
         lTicks_l = 0;
         lTicks_r = 0;
+        bCheckFirstTick = true;
 
-        //      ulTickLastDeltaTime_l = ulTickDeltaTime_l;
-        //      ulTickLastDeltaTime_r = ulTickDeltaTime_r;
-        //      ulTickDeltaTime_l = 0;
-        //
+        ulTickLastDeltaTime_l = ulTickDeltaTime_l;
+        ulTickLastDeltaTime_r = ulTickDeltaTime_r;
+        ulTickDeltaTime_l = 0;
+
 
       }
 
-      xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
+      //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
 
       xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
 
@@ -257,7 +332,7 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
 
-  Serial.println( "TaskEncoderTicksReadWithDebouncing" );
+  //Serial.println( "TaskEncoderTicksReadWithDebouncing" );
 
   struct ASample
   {
@@ -324,6 +399,11 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     {
       xSample1.cTickDir_l = xMessageTickDir.cTickDir_l;
       xSample1.cTickDir_r = xMessageTickDir.cTickDir_r;
+      if (true == xMessageTickDir.bResetAll)
+      {
+        xSample1.lTickCount_l = 0;
+        //Serial.println("<<2>>");
+      }
     }
     else // Valid for test : Will create problem when real use of direction
     {
@@ -336,6 +416,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     // Call code if Bounce fell (transition from HIGH to LOW) :
     if ( xSample1.debouncer_l.fell() )
     {
+      //ulTimeStamp = millis();
       xSample1.ulEncoderTickTimeStamp_l = ulTimeStamp;
       xSample1.lTickCount_l += xSample1.cTickDir_l;
       xSample1.ulTickDeltaTime_l = abs(ulTimeStamp - xSample1.ulEncoderLastTickTimeStamp_l);
@@ -349,6 +430,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
     if ( xSample1.debouncer_r.fell() )
     {
+      //ulTimeStamp = millis();
       xSample1.ulEncoderTickTimeStamp_r = ulTimeStamp;
       xSample1.lTickCount_r += xSample1.cTickDir_r;
       xSample1.ulTickDeltaTime_r = abs(ulTimeStamp - xSample1.ulEncoderLastTickTimeStamp_r);
@@ -362,6 +444,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
     if (true == hasUpdated)
     {
+      //ulTimeStamp = millis();
       xQueueSendToFront( xTickQueue, &( xMessageTick ), 0 );
 
       xMessageTick.lTickCount_l = 0;

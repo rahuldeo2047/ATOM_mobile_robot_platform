@@ -94,7 +94,8 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
 
 void robot_wheel_stop()
 {
-  robot_wheel(RIGHT, 0);
-  robot_wheel(LEFT, 0);
+  char dummy;
+  robot_wheel(RIGHT, 0, &dummy, &dummy);
+  robot_wheel(LEFT, 0, &dummy, &dummy);
 }
 
