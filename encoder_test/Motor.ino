@@ -49,17 +49,16 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
         analogWrite(MOTOR_RIGHT_PIN_POS, 0);
         analogWrite(MOTOR_RIGHT_PIN_NEG, (-wheel_speed));
         rDir = -1;
-        lDir = 1;
-
-
+        //lDir = 1;
+        (*dir_r) = rDir;
       }
       else
       {
         analogWrite(MOTOR_RIGHT_PIN_POS, (wheel_speed));
         analogWrite(MOTOR_RIGHT_PIN_NEG, 0);
         rDir = 1;
-        lDir = -1;
-
+        //lDir = -1;
+        (*dir_r) = rDir;
       }
       break;
 
@@ -68,17 +67,17 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
       {
         analogWrite(MOTOR_LEFT_PIN_POS, 0);
         analogWrite(MOTOR_LEFT_PIN_NEG, (-wheel_speed ));
-        rDir = 1;
+        //rDir = 1;
         lDir = -1;
-
+        (*dir_l) = lDir;
       }
       else
       {
         analogWrite(MOTOR_LEFT_PIN_POS, (wheel_speed));
         analogWrite(MOTOR_LEFT_PIN_NEG, 0 );
-        rDir = -1;
+        //rDir = -1;
         lDir = 1;
-
+        (*dir_l) = lDir;
       }
 
       break;
@@ -86,8 +85,8 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
     default : break;
   }
 
-  (*dir_r) = rDir;
-  (*dir_l) = lDir;
+
+
 
 
 }
