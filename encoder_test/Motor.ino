@@ -35,7 +35,7 @@ void robot_begin()
 }
 
 
-void robot_wheel(WHEEL wheel, int wheel_speed)
+void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
 {
 
   //mapSpeeds();
@@ -85,6 +85,10 @@ void robot_wheel(WHEEL wheel, int wheel_speed)
 
     default : break;
   }
+
+  (*dir_r) = rDir;
+  (*dir_l) = lDir;
+
 
 }
 

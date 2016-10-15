@@ -42,17 +42,19 @@ void robot_wheel(WHEEL wheel, int wheel_speed);
 
 struct AMessage
 {
-  unsigned long ulTickCount_l;
+  char cTickDir_l;
+  long lTickCount_l;
   unsigned long ulTickDeltaTime_l;
   unsigned long ulTickTimeStamp_l;
 
-  unsigned long ulTickCount_r;
+  char cTickDir_r;
+  long lTickCount_r;
   unsigned long ulTickDeltaTime_r;
   unsigned long ulTickTimeStamp_r;
 
 } xMessage;
 
-QueueHandle_t xPrintQueue, xTickQueue;
+QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue;
 
 /*
   DESCRIPTION
@@ -96,13 +98,17 @@ void setup() {
 #endif
 
   xTickQueue  = xQueueCreate( 10, sizeof( AMessage) );
+  xTickDirQueue  = xQueueCreate( 10, sizeof( AMessage) );
 
 
-  if ( (xPrintQueue != NULL)
+  if (
 #if (1 == USE_PRINTER_TASK)
-       && (xTickQueue != NULL)
+    (xPrintQueue != NULL)
 #endif
-     )
+    && (xTickQueue != NULL)
+    && (xTickDirQueue != NULL)
+
+  )
   {
     // Now set up two Tasks to run independently.
     xReturned = xTaskCreate(
@@ -140,7 +146,7 @@ void setup() {
 
 }
 
-void loop() 
+void loop()
 {
 
 }
@@ -159,7 +165,7 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
     Serial.print("t");
     Serial.print( xMessage3.ulTickDeltaTime_l );
     Serial.print(",c");
-    Serial.println( xMessage3.ulTickCount_l );
+    Serial.println( xMessage3.lTickCount_l );
   }
 
 }
@@ -172,52 +178,68 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 #define WHEEL_CYCLE_TEST_SPEED (200)
 
   Serial.println( "TaskRobotTest" );
-  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED);
 
-  byte bRndSpeed = 0;
+  char dummy;
+  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
 
-  AMessage xMessage2;
-  unsigned long ulTicks_l = 0, ulTicks_r = 0;
-  unsigned long ulLastTicks_l = 0, ulLastTicks_r = 0;
+  int iRndSpeed = 0;
+  char cPosNeg = 0;
+  AMessage xMessageTick;
+  AMessage xMessageTickDir;
+
+  long lTicks_l = 0, lTicks_r = 0;
+  long lLastTicks_l = 0, lLastTicks_r = 0;
 
   unsigned long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
   unsigned long ulTickLastDeltaTime_l = 0, ulTickLastDeltaTime_r = 0;
 
   for (;;) // A Task shall never return or exit.
   {
-    xQueueReceive( xTickQueue, &xMessage2, portMAX_DELAY );
-
-    ulTicks_l = xMessage2.ulTickCount_l;
-    // ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l;
-    
-    xMessage2.ulTickCount_l = xMessage2.ulTickCount_l - ulLastTicks_l;
-    // xMessage2.ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l - ulTickDeltaTime_l;
-
-    xQueueSendToFront( xPrintQueue, &( xMessage2 ), 0 );
-
-    if ( (ulTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0)
+    if (xQueueReceive( xTickQueue, &xMessageTick, portMAX_DELAY ))
     {
 
-      //#if (0 == USE_PRINTER_TASK)
-      //#endif
-      //robot_wheel(LEFT, 0);
-      //vTaskDelay(100);
-      bRndSpeed = random(bRndSpeed-50, bRndSpeed+50);
-      bRndSpeed = bRndSpeed<150 ? 150 : bRndSpeed;
-      bRndSpeed = bRndSpeed>255 ? 255 : bRndSpeed;
-      
-      Serial.print("<<>>");
-      Serial.println(bRndSpeed);
-      robot_wheel(LEFT, bRndSpeed );
+      lTicks_l = xMessageTick.lTickCount_l;
+      // ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l;
 
-      ulLastTicks_l = ulTicks_l;
-      ulLastTicks_r = ulTicks_r;
-      ulTicks_l = 0;
+      xMessageTick.lTickCount_l = xMessageTick.lTickCount_l - lLastTicks_l;
+      // xMessage2.ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l - ulTickDeltaTime_l;
 
-//      ulTickLastDeltaTime_l = ulTickDeltaTime_l;
-//      ulTickLastDeltaTime_r = ulTickDeltaTime_r;
-//      ulTickDeltaTime_l = 0;
-//      
+      if ( (lTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0)
+      {
+
+        //#if (0 == USE_PRINTER_TASK)
+        //#endif
+        //robot_wheel(LEFT, 0);
+        //vTaskDelay(100);
+        iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
+        iRndSpeed = iRndSpeed < 150 ? 150 : iRndSpeed;
+        iRndSpeed = iRndSpeed > 255 ? 255 : iRndSpeed;
+
+        cPosNeg = (char)random(0, 1) == 0 ? 1 : -1;
+        // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
+        //xMessage2.cTickDir_l = cPosNeg;
+
+        Serial.print("<<>>");
+        Serial.println(iRndSpeed);
+
+
+        robot_wheel(LEFT, iRndSpeed , &xMessageTick.cTickDir_l, &xMessageTick.cTickDir_r );
+        xMessageTickDir = xMessageTick;
+        xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 ); // only dirs are valid
+
+        lLastTicks_l = lTicks_l;
+        lLastTicks_r = lTicks_r;
+        lTicks_l = 0;
+        lTicks_r = 0;
+
+        //      ulTickLastDeltaTime_l = ulTickDeltaTime_l;
+        //      ulTickLastDeltaTime_r = ulTickDeltaTime_r;
+        //      ulTickDeltaTime_l = 0;
+        //
+
+      }
+
+      xQueueSendToFront( xPrintQueue, &( xMessageTick ), 0 );
 
     }
   }
@@ -240,10 +262,13 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     unsigned long ulEncoderLastTickTimeStamp_l = 0;
     unsigned long ulEncoderLastTickTimeStamp_r = 0;
 
-    unsigned long ulTickCount_l = 0;
-    unsigned long ulTickCount_r = 0;
+    long lTickCount_l = 0;
+    long lTickCount_r = 0;
     unsigned long ulTickDeltaTime_l = 0;
     unsigned long ulTickDeltaTime_r = 0;
+
+    char cTickDir_l = 1;
+    char cTickDir_r = 1;
 
   } xSample;
 
@@ -263,16 +288,19 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
   unsigned long ulTimeStamp = millis();
 
-  AMessage xMessage1;
+  AMessage xMessageTick, xMessageTickDir;
   randomSeed(analogRead(0));
 
   boolean hasUpdated = false;
 
-  xMessage1.ulTickCount_l = 0;
-  xMessage1.ulTickCount_r = 0;
+  xMessageTick.cTickDir_l = 0;
+  xMessageTick.cTickDir_r = 0;
 
-  xMessage1.ulTickDeltaTime_l = 0;
-  xMessage1.ulTickDeltaTime_r = 0;
+  xMessageTick.lTickCount_l = 0;
+  xMessageTick.lTickCount_r = 0;
+
+  xMessageTick.ulTickDeltaTime_l = 0;
+  xMessageTick.ulTickDeltaTime_r = 0;
 
   for (;;) // A Task shall never return or exit.
   {
@@ -280,19 +308,28 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     xSample1.debouncer_l.update();
     xSample1.debouncer_r.update();
     ulTimeStamp = millis();
-    xMessage1.ulTickTimeStamp_l = ulTimeStamp;
-    xMessage1.ulTickTimeStamp_r = ulTimeStamp;
+    xMessageTick.ulTickTimeStamp_l = ulTimeStamp;
+    xMessageTick.ulTickTimeStamp_r = ulTimeStamp;
+
+    //check if any change in motor direction registered
+    if (xQueueReceive( xTickDirQueue, &xMessageTickDir, 0 ))
+    {
+      xSample1.cTickDir_l = xMessageTickDir.cTickDir_l;
+      xSample1.cTickDir_r = xMessageTickDir.cTickDir_r;
+    }
+
+    //
 
     // Call code if Bounce fell (transition from HIGH to LOW) :
     if ( xSample1.debouncer_l.fell() )
     {
       xSample1.ulEncoderTickTimeStamp_l = ulTimeStamp;
-      xSample1.ulTickCount_l++;
+      xSample1.lTickCount_l += xSample1.cTickDir_l;
       xSample1.ulTickDeltaTime_l = abs(ulTimeStamp - xSample1.ulEncoderLastTickTimeStamp_l);
       xSample1.ulEncoderLastTickTimeStamp_l = ulTimeStamp;
 
-      xMessage1.ulTickCount_l = xSample1.ulTickCount_l;
-      xMessage1.ulTickDeltaTime_l = xSample1.ulTickDeltaTime_l ;
+      xMessageTick.lTickCount_l = xSample1.lTickCount_l;
+      xMessageTick.ulTickDeltaTime_l = xSample1.ulTickDeltaTime_l ;
 
       hasUpdated = true;
     }
@@ -300,25 +337,25 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     if ( xSample1.debouncer_r.fell() )
     {
       xSample1.ulEncoderTickTimeStamp_r = ulTimeStamp;
-      xSample1.ulTickCount_r++;
+      xSample1.lTickCount_r += xSample1.cTickDir_r;
       xSample1.ulTickDeltaTime_r = abs(ulTimeStamp - xSample1.ulEncoderLastTickTimeStamp_r);
       xSample1.ulEncoderLastTickTimeStamp_r = ulTimeStamp;
 
-      xMessage1.ulTickCount_r = xSample1.ulTickCount_r;
-      xMessage1.ulTickDeltaTime_r = xSample1.ulTickDeltaTime_r ;
+      xMessageTick.lTickCount_r = xSample1.lTickCount_r;
+      xMessageTick.ulTickDeltaTime_r = xSample1.ulTickDeltaTime_r ;
 
       hasUpdated = true;
     }
 
     if (true == hasUpdated)
     {
-      xQueueSendToFront( xTickQueue, &( xMessage1 ), 0 );
+      xQueueSendToFront( xTickQueue, &( xMessageTick ), 0 );
 
-      xMessage1.ulTickCount_l = 0;
-      xMessage1.ulTickDeltaTime_l = 0;
+      xMessageTick.lTickCount_l = 0;
+      xMessageTick.ulTickDeltaTime_l = 0;
 
-      xMessage1.ulTickCount_r = 0;
-      xMessage1.ulTickDeltaTime_r = 0;
+      xMessageTick.lTickCount_r = 0;
+      xMessageTick.ulTickDeltaTime_r = 0;
 
       hasUpdated = false;
     }
