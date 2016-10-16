@@ -311,7 +311,6 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
         //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       }
 
-      Serial.println("E");
       xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       // !? Doing xQueueSendToFrontFromISR(...) && no xMessageTickDir.bResetAll = true;
       // is forcing it to be used in the next thread.
@@ -345,9 +344,22 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
   Serial.println( "TaskRobotTest" );
 
-  char dummy;
-  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
-  robot_wheel(RIGHT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+  AMessage xMessageTickDir;
+  xMessageTickDir = DEFAULT_AMESSAGE;
+
+  xMessageTickDir.bResetAll = false;
+
+  xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.bHasMotorSpeedUpdated_l = true;
+
+  xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.bHasMotorSpeedUpdated_r = true;
+
+  xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+
+  //  char dummy;
+  //  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+  //  robot_wheel(RIGHT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
 
   boolean bHasUpdated_l = false;
   boolean bHasUpdated_r = false;
@@ -357,7 +369,7 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
   char cPosNeg = 0;
   boolean bCheckFirstTick = true;
   //AMessage xMessageTick;
-  AMessage xMessageTickDir;
+
 
   long lTicks_l = 0, lTicks_r = 0;
   long lLastTicks_l = 0, lLastTicks_r = 0;
@@ -439,9 +451,7 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
         xMessageTickDir.iMotorSpeed_l = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
-        //      xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
 
-        //robot_wheel(LEFT, 0 , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         Serial.println("[SL]");
 
         lLastTicks_l = lTicks_l;
@@ -449,8 +459,6 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
         bCheckFirstTick = true;
 
         ulTickLastDeltaTime_l = ulTickDeltaTime_l;
-        ulTickDeltaTime_l = 0;
-
 
       }
 
@@ -598,10 +606,10 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
       xSample1.cTickDir_l = xMessageTickDir.cTickDir_l;
       xSample1.cTickDir_r = xMessageTickDir.cTickDir_r;
 
-#warning xSample1.cTickDir_l/r = 1;
-      // Temporary
-      xSample1.cTickDir_l = 1;
-      xSample1.cTickDir_r = 1;
+      //#warning xSample1.cTickDir_l/r = 1;
+      //      // Temporary
+      //      xSample1.cTickDir_l = 1;
+      //      xSample1.cTickDir_r = 1;
 
       if (true == xMessageTickDir.bResetAll)
       {
