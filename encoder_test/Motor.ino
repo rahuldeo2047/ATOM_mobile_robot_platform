@@ -43,8 +43,15 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
   switch (wheel)
   {
     case RIGHT:
-
-      if (wheel_speed < 0)
+      if (wheel_speed == 0)
+      {
+        analogWrite(MOTOR_RIGHT_PIN_POS, 0);
+        analogWrite(MOTOR_RIGHT_PIN_NEG, 0);
+        //rDir = -1;
+        //lDir = 1;
+        //(*dir_r) = rDir;
+      }
+      else if (wheel_speed < 0)
       {
         analogWrite(MOTOR_RIGHT_PIN_POS, 0);
         analogWrite(MOTOR_RIGHT_PIN_NEG, (-wheel_speed));
@@ -63,7 +70,15 @@ void robot_wheel(WHEEL wheel, int wheel_speed, char * dir_l, char * dir_r)
       break;
 
     case LEFT:
-      if (wheel_speed < 0)
+      if (wheel_speed == 0)
+      {
+        analogWrite(MOTOR_LEFT_PIN_POS, 0);
+        analogWrite(MOTOR_LEFT_PIN_NEG, 0);
+        //rDir = 1;
+        //lDir = -1;
+        //(*dir_l) = lDir;
+      }
+      else if (wheel_speed < 0)
       {
         analogWrite(MOTOR_LEFT_PIN_POS, 0);
         analogWrite(MOTOR_LEFT_PIN_NEG, (-wheel_speed ));

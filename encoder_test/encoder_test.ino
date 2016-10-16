@@ -166,7 +166,7 @@ void setup() {
                                  "Timer",
                                  /* The timer period in ticks, must be
                                    greater than 0. */
-                                 10,
+                                 5,
                                  /* The timers will auto-reload themselves
                                    when they expire. */
                                  pdTRUE,
@@ -263,7 +263,7 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
 }
 #endif
 
-#define WHEEL_CYCLE_TEST_SPEED (200)
+#define WHEEL_CYCLE_TEST_SPEED (160)
 #define WHEEL_CYCLE_TEST_MAX_SPEED (255)
 #define WHEEL_CYCLE_TEST_MIN_SPEED (150)
 
@@ -297,7 +297,7 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
       {
         xMessageTickDir.bHasMotorSpeedUpdated_l = false;
         robot_wheel(LEFT, xMessageTickDir.iMotorSpeed_l , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
-        Serial.println("[SL^]");
+        //Serial.println("[SL^]");
         //xMessageTickDir.bResetAll = true;
         //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       }
@@ -306,7 +306,7 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
       {
         xMessageTickDir.bHasMotorSpeedUpdated_r = false;
         robot_wheel(RIGHT, xMessageTickDir.iMotorSpeed_r , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
-        Serial.println("[SR^]");
+        //Serial.println("[SR^]");
         //xMessageTickDir.bResetAll = true;
         //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       }
@@ -349,10 +349,10 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
   xMessageTickDir.bResetAll = false;
 
-  xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.iMotorSpeed_l = -WHEEL_CYCLE_TEST_SPEED;
   xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
-  xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.iMotorSpeed_r = -WHEEL_CYCLE_TEST_SPEED;
   xMessageTickDir.bHasMotorSpeedUpdated_r = true;
 
   xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
@@ -489,8 +489,8 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
         ulTickLastDeltaTime_r = ulTickDeltaTime_r;
 
       }
-
-      xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
+#warning printer is off
+      //xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
 
     }
 
@@ -571,6 +571,10 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
   xSample1.cTickDir_r = 1;
 
   int iDeltaTick_l = 0, iDeltaTick_r = 0;
+  long lLastTime = 0;
+  long lDeltaTime = 0;
+
+  float fDeltaSpeed_l = 0, fDeltaSpeed_r = 0;
 
   float fTrackWidth = 150.0f;
   float fDiameterWheel = 64.0f;
@@ -578,6 +582,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
   // Odometry var
   float fDistancePerCount = PI * fDiameterWheel / fCountPerRev;
+  float fTotalDistance = 0;
   float fDeltaDistance = 0; //(leftCounts + rightCounts) / 2.0 * fDistancePerCount;
   float fCountsPerRotation = (fTrackWidth / fDiameterWheel) * fCountPerRev;
   float fRadiansPerCount = PI * (fDiameterWheel / fTrackWidth) / fCountPerRev;
@@ -631,6 +636,30 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
       {
         iDeltaTick_l = xSample1.lTickCount_l - xSample1.lLastTickCount_l;
         iDeltaTick_r = xSample1.lTickCount_r - xSample1.lLastTickCount_r;
+        lDeltaTime = ulTimeStamp - lLastTime;
+
+        fDeltaSpeed_l = iDeltaTick_l - lDeltaTime;
+
+        fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
+        fTotalDistance += fDeltaDistance;
+        
+        if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
+        {
+          Serial.print(iDeltaTick_l);
+          Serial.print( ", ");
+
+          Serial.print(iDeltaTick_r);
+          Serial.print( ", ");
+
+          Serial.print(fTotalDistance);
+          Serial.print( " | ");
+
+
+          Serial.print(1000 * fDeltaDistance / lDeltaTime);
+          Serial.print( " mm/s ");
+          Serial.print(fDeltaDistance);
+          Serial.println( " mm");
+        }
 
         // Perform Odometry calc
         fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
@@ -641,11 +670,12 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
         xSample1.lLastTickCount_l = xSample1.lTickCount_l;
         xSample1.lLastTickCount_r = xSample1.lTickCount_r;
+        lLastTime = ulTimeStamp;
         //Serial.println("T^");
-
+        bTriggerSample = false;
       }
 
-      bTriggerSample = false;
+
     }
 
     if ( xSample1.debouncer_l.fell() )
