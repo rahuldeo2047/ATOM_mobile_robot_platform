@@ -18,7 +18,7 @@
 
 #include <Arduino_FreeRTOS.h>
 #include <semphr.h>  // add the FreeRTOS functions for Semaphores (or Flags).
-
+#include <timers.h>
 // Declare a mutex Semaphore Handle which we will use to manage the Serial Port.
 // It will be used to ensure only only one Task is accessing this resource at any time.
 //SemaphoreHandle_t xSerialSemaphore;
@@ -43,7 +43,7 @@ void TaskRobotWheelCtrlTest( void *pvParameters );
 
 
 TaskHandle_t xHandleTaskRobotWheelCtrlTest;
-
+SemaphoreHandle_t xSemaphoreSample = NULL;
 
 
 void robot_wheel(WHEEL wheel, int wheel_speed, char*, char *);
@@ -52,13 +52,13 @@ struct AMessage
 {
   char cTickDir_l;
   long lTickCount_l;
-  unsigned long ulTickDeltaTime_l;
-  unsigned long ulTickTimeStamp_l;
+  long ulTickDeltaTime_l;
+  long ulTickTimeStamp_l;
 
   char cTickDir_r;
   long lTickCount_r;
-  unsigned long ulTickDeltaTime_r;
-  unsigned long ulTickTimeStamp_r;
+  long ulTickDeltaTime_r;
+  long ulTickTimeStamp_r;
 
   boolean bResetAll;
 
@@ -72,7 +72,7 @@ struct AMessage
 
 #define DEFAULT_AMESSAGE { 0,0,0,0,0,0,0,0,false, false, false, 0, 0 };
 
-QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue, xMotorQueue;
+QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue, xMotorQueue, xSampleQueue;
 
 /*
   DESCRIPTION
@@ -120,6 +120,7 @@ void setup() {
   xTickQueue  = xQueueCreate( 5, sizeof( AMessage) );
   xTickDirQueue  = xQueueCreate( 5, sizeof( AMessage) );
   xMotorQueue = xQueueCreate( 5, sizeof( AMessage) );
+  xSampleQueue = xQueueCreate( 1, sizeof( boolean) );
 
   if (
 #if (1 == USE_PRINTER_TASK)
@@ -128,6 +129,7 @@ void setup() {
     && (xTickQueue != NULL)
     && (xTickDirQueue != NULL)
     && (xMotorQueue != NULL)
+    && (xSampleQueue != NULL)
   )
   {
     // Now set up two Tasks to run independently.
@@ -158,6 +160,28 @@ void setup() {
                    ,  &xHandleTaskRobotWheelCtrlTest );
     Serial.println( xReturned );
 
+    TimerHandle_t xBlockTime = xTimerCreate
+                               ( /* Just a text name, not used by the RTOS
+                     kernel. */
+                                 "Timer",
+                                 /* The timer period in ticks, must be
+                                   greater than 0. */
+                                 10,
+                                 /* The timers will auto-reload themselves
+                                   when they expire. */
+                                 pdTRUE,
+                                 /* The ID is used to store a count of the
+                                   number of times the timer has expired, which
+                                   is initialised to 0. */
+                                 ( void * ) 0,
+                                 /* Each timer calls the same callback when
+                                   it expires. */
+                                 vTimerCallback
+                               );
+
+    xReturned &= xTimerStart(xBlockTime, TickType_t(10));
+    Serial.println( xReturned );
+
 #if (1 == USE_PRINTER_TASK)
     xReturned &= xTaskCreate(
                    TaskPrintData
@@ -179,6 +203,30 @@ void setup() {
 
 void loop()
 {
+
+}
+
+void vTimerCallback( TimerHandle_t xTimer )
+{
+  uint32_t ulCount;
+
+  /* Optionally do something if the pxTimer parameter is NULL. */
+  configASSERT( pxTimer );
+
+  /* The number of times this timer has expired is saved as the
+    timer's ID.  Obtain the count. */
+  ulCount = ( uint32_t ) pvTimerGetTimerID( xTimer );
+
+  /* Increment the count, then test to see if the timer has expired
+    ulMaxExpiryCountBeforeStopping yet. */
+  ulCount++;
+
+  //xTimerStop( pxTimer, 0 );
+  vTimerSetTimerID( xTimer, ( void * ) ulCount );
+
+  boolean bTriggerSample = true;
+  xQueueSendToFront( xSampleQueue, &( bTriggerSample ), 0 );
+  //Serial.print("T"), Serial.println(ulCount);
 
 }
 
@@ -251,7 +299,7 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
         robot_wheel(LEFT, xMessageTickDir.iMotorSpeed_l , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         Serial.println("[SL^]");
         //xMessageTickDir.bResetAll = true;
-        xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
+        //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       }
 
       if ( true == xMessageTickDir.bHasMotorSpeedUpdated_r )
@@ -260,10 +308,11 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
         robot_wheel(RIGHT, xMessageTickDir.iMotorSpeed_r , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         Serial.println("[SR^]");
         //xMessageTickDir.bResetAll = true;
-        xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
+        //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       }
 
-
+      Serial.println("E");
+      xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
       // !? Doing xQueueSendToFrontFromISR(...) && no xMessageTickDir.bResetAll = true;
       // is forcing it to be used in the next thread.
 
@@ -273,6 +322,20 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
 
 }
 
+
+TaskHandle_t xHandleTaskStartMotors;
+void TaskStartMotors( void *pvParameters __attribute__((unused)) )  // This is a Task.
+{
+  char dummy;
+  //for (;;) // A Task shall never return or exit.
+  {
+
+    robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+    robot_wheel(RIGHT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+    vTaskDelete(xHandleTaskStartMotors);
+
+  }
+}
 
 void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
@@ -286,6 +349,8 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
   robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
   robot_wheel(RIGHT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
 
+  boolean bHasUpdated_l = false;
+  boolean bHasUpdated_r = false;
   boolean bHasUpdated = false;
 
   int iRndSpeed = 0;
@@ -298,63 +363,88 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
   long lLastTicks_l = 0, lLastTicks_r = 0;
   long lFirstTicks_l = 0, lFirstTicks_r = 0;
 
-  unsigned long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
-  unsigned long ulTickLastDeltaTime_l = 0, ulTickLastDeltaTime_r = 0;
-  unsigned long lFirstDeltaTime_l = 0, lFirstDeltaTime_r = 0;
+  long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
+  long ulTickLastDeltaTime_l = 0, ulTickLastDeltaTime_r = 0;
+  long lFirstDeltaTime_l = 0, lFirstDeltaTime_r = 0;
+
+
+  // Odometry
+  //float PI = 3.14159f;
+  //float TWO_PI = PI * 2.0f;
+
+  //long lTicks_l = 0, lTicks_r = 0; // mLeftEncoder; mRightEncoder;
+  //long lLastTicks_l = 0, lLastTicks_r = 0; //int mPreviousLeftCounts; int mPreviousRightCounts;
+  float fDistancePerCount;
+  float fRadiansPerCount;
+  float mX = 0.0f;
+  float mY = 0.0f;
+  float mHeading = 0.0f;
+  //int mPeriod;
+  //long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
+
+  //  fdistancePerCount = PI * diameterWheel / countsPerRevolution;
+  //  fdeltaDistance = (leftCounts + rightCounts) / 2.0 * distancePerCount;
+  //  countsPerRotation = (trackWidth / wheelDiameter) * countsPerRevolution;
+  //  radiansPerCount = Pi * (wheelDiameter / trackWidth) / countsPerRevolution;
+  //  deltaHeading = (rightCounts leftCounts) * radiansPerCount;
+  //  deltaX = deltaDistance * cos(heading);
+  //  deltaY = deltaDistance * sin(heading);
 
   for (;;) // A Task shall never return or exit.
   {
+
+    if ( true == bHasUpdated)
+    {
+      // #warning loop broken
+      xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+      //      xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_SPEED;
+      //      xMessageTickDir.bHasMotorSpeedUpdated_r = true;
+      //      xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+      //
+      //      xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_SPEED;
+      //      xMessageTickDir.bHasMotorSpeedUpdated_l = true;
+      //      xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+      //
+
+      //robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+      //robot_wheel(RIGHT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
+
+      bHasUpdated = false;
+
+    }
+
     //xMessageTickDir = DEFAULT_AMESSAGE;
     if (xQueueReceive( xTickQueue, &xMessageTickDir, portMAX_DELAY ))
     {
 
       lTicks_l = xMessageTickDir.lTickCount_l;
       lTicks_r = xMessageTickDir.lTickCount_r;
-      // ulTickDeltaTime_l = xMessage2.ulTickDeltaTime_l;
 
-      //      if ( true == bCheckFirstTick)
-      //      {
-      //        lFirstTicks_l = xMessageTickDir.lTickCount_l;
-      //        lFirstDeltaTime_l = xMessageTickDir.ulTickDeltaTime_l;
-      //        bCheckFirstTick = false;
-      //      }
-      //
-      //      xMessageTickDir.lTickCount_l = xMessageTickDir.lTickCount_l - lLastTicks_l - lFirstTicks_l;
-      //      xMessageTickDir.ulTickDeltaTime_l = xMessageTickDir.ulTickDeltaTime_l - ulTickDeltaTime_l;
+      lTicks_l = lTicks_l == 0 ? 1 : lTicks_l;
+      lTicks_r = lTicks_r == 0 ? 1 : lTicks_r;
 
-      //xMessageTickDir = xMessageTick;
-
-      if ( (lTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0)
+      if ( ( lTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0 )
       {
+
         bHasUpdated = true;
 
-        //#if (0 == USE_PRINTER_TASK)
-        //#endif
-        //robot_wheel(LEFT, 0);
-        //vTaskDelay(100);
         iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
         iRndSpeed = iRndSpeed < 150 ? 150 : iRndSpeed;
         iRndSpeed = iRndSpeed > 255 ? 255 : iRndSpeed;
 
         cPosNeg = (char)random(0, 1) == 0 ? 1 : -1;
         // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
-        //xMessage2.cTickDir_l = cPosNeg;
 
         xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_l = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
-        xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+        //      xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
 
         //robot_wheel(LEFT, 0 , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         Serial.println("[SL]");
-        //Serial.println(iRndSpeed);
-        //vTaskResume( xHandleTaskRobotWheelCtrlTest);
-        //xMessageTickDir = xMessageTick;
 
-        lLastTicks_l = -1;
-
-        lTicks_l = -1;
+        lLastTicks_l = lTicks_l;
 
         bCheckFirstTick = true;
 
@@ -364,56 +454,37 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
       }
 
-      if ( (lTicks_r % WHEEL_CYCLE_TEST_COUNT ) == 0)
+
+      if ( ( lTicks_r % WHEEL_CYCLE_TEST_COUNT ) == 0 )
       {
 
         bHasUpdated = true;
         //#if (0 == USE_PRINTER_TASK)
         //#endif
-        //robot_wheel(LEFT, 0);
-        //vTaskDelay(100);
         iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
         iRndSpeed = iRndSpeed < 150 ? 150 : iRndSpeed;
         iRndSpeed = iRndSpeed > 255 ? 255 : iRndSpeed;
 
         cPosNeg = (char)random(0, 1) == 0 ? 1 : -1;
         // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
-        //xMessage2.cTickDir_l = cPosNeg;
 
         xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_r = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_r = true;
-        xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
-
-        //robot_wheel(RIGHT, 0 , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         Serial.println("[SR]");
-        //Serial.println(iRndSpeed);
 
-        //xMessageTickDir = xMessageTick;
-
-        lLastTicks_r = -1;
-        lTicks_r = -1;
+        lLastTicks_r = lTicks_r;
 
         bCheckFirstTick = true;
 
         ulTickLastDeltaTime_r = ulTickDeltaTime_r;
 
-
       }
-
-      if ( true == bHasUpdated)
-      {
-
-        //vTaskResume( xHandleTaskRobotWheelCtrlTest);
-      }
-      //xQueueSendToFront( xTickDirQueue, &( xMessageTickDir ), 0 );
 
       xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
 
     }
-
-
 
   }
 
@@ -434,15 +505,18 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     Bounce debouncer_l = Bounce();
     Bounce debouncer_r = Bounce();
 
-    unsigned long ulEncoderTickTimeStamp_l = 0;
-    unsigned long ulEncoderTickTimeStamp_r = 0;
-    unsigned long ulEncoderLastTickTimeStamp_l = 0;
-    unsigned long ulEncoderLastTickTimeStamp_r = 0;
+    long ulEncoderTickTimeStamp_l = 0;
+    long ulEncoderTickTimeStamp_r = 0;
+    long ulEncoderLastTickTimeStamp_l = 0;
+    long ulEncoderLastTickTimeStamp_r = 0;
 
     long lTickCount_l = 0;
     long lTickCount_r = 0;
-    unsigned long ulTickDeltaTime_l = 0;
-    unsigned long ulTickDeltaTime_r = 0;
+    long ulTickDeltaTime_l = 0;
+    long ulTickDeltaTime_r = 0;
+
+    long lLastTickCount_l = 0;
+    long lLastTickCount_r = 0;
 
     //long lTickVel_l = 0;
     //long lTickVel_r = 0;
@@ -469,12 +543,12 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
   xSample1.debouncer_l.interval(5);
   xSample1.debouncer_r.interval(5);
 
-  unsigned long ulTimeStamp = millis();
+  long ulTimeStamp = millis();
 
   AMessage xMessageTick, xMessageTickDir;
   randomSeed(analogRead(0));
 
-  boolean hasUpdated = false;
+  boolean hasUpdated = false, bTriggerSample = false;
 
   xMessageTick.cTickDir_l = 0;
   xMessageTick.cTickDir_r = 0;
@@ -488,10 +562,26 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
   xSample1.cTickDir_l = 1;
   xSample1.cTickDir_r = 1;
 
+  int iDeltaTick_l = 0, iDeltaTick_r = 0;
+
+  float fTrackWidth = 150.0f;
+  float fDiameterWheel = 64.0f;
+  float fCountPerRev = 20.0f;
+
+  // Odometry var
+  float fDistancePerCount = PI * fDiameterWheel / fCountPerRev;
+  float fDeltaDistance = 0; //(leftCounts + rightCounts) / 2.0 * fDistancePerCount;
+  float fCountsPerRotation = (fTrackWidth / fDiameterWheel) * fCountPerRev;
+  float fRadiansPerCount = PI * (fDiameterWheel / fTrackWidth) / fCountPerRev;
+  float fHeading = 0.0f;
+  float fDeltaHeading = 0;//(rightCounts leftCounts) * fRadiansPerCount;
+  float fDeltaX = fDeltaDistance * cos(fHeading);
+  float fDeltaY = fDeltaDistance * sin(fHeading);
+
   for (;;) // A Task shall never return or exit.
   {
 
-    xMessageTickDir = DEFAULT_AMESSAGE;
+    //xMessageTickDir = DEFAULT_AMESSAGE;
     xSample1.debouncer_l.update();
     xSample1.debouncer_r.update();
     ulTimeStamp = millis();
@@ -507,6 +597,12 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
       xSample1.cTickDir_l = xMessageTickDir.cTickDir_l;
       xSample1.cTickDir_r = xMessageTickDir.cTickDir_r;
+
+#warning xSample1.cTickDir_l/r = 1;
+      // Temporary
+      xSample1.cTickDir_l = 1;
+      xSample1.cTickDir_r = 1;
+
       if (true == xMessageTickDir.bResetAll)
       {
         xSample1.lTickCount_l = 0;
@@ -521,8 +617,29 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     //    }
 
     //
+    if (xQueueReceive( xSampleQueue, &bTriggerSample, 0 ))
+    {
+      if (true == bTriggerSample)
+      {
+        iDeltaTick_l = xSample1.lTickCount_l - xSample1.lLastTickCount_l;
+        iDeltaTick_r = xSample1.lTickCount_r - xSample1.lLastTickCount_r;
 
-    // Call code if Bounce fell (transition from HIGH to LOW) :
+        // Perform Odometry calc
+        fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
+        //fHeading = 0.0f;
+        fDeltaHeading = (-iDeltaTick_l + iDeltaTick_r) * fRadiansPerCount;
+        fDeltaX = fDeltaDistance * cos(fHeading);
+        fDeltaY = fDeltaDistance * sin(fHeading);
+
+        xSample1.lLastTickCount_l = xSample1.lTickCount_l;
+        xSample1.lLastTickCount_r = xSample1.lTickCount_r;
+        //Serial.println("T^");
+
+      }
+
+      bTriggerSample = false;
+    }
+
     if ( xSample1.debouncer_l.fell() )
     {
       //ulTimeStamp = millis();
@@ -551,21 +668,15 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
       hasUpdated = true;
     }
 
+
     if (true == hasUpdated)
     {
-      //ulTimeStamp = millis();
       xQueueSendToFront( xTickQueue, &( xMessageTick ), 0 );
-
-      xMessageTick.lTickCount_l = 0;
-      xMessageTick.ulTickDeltaTime_l = 0;
-
-      xMessageTick.lTickCount_r = 0;
-      xMessageTick.ulTickDeltaTime_r = 0;
-
       hasUpdated = false;
     }
 
   }
 
 }
+
 
