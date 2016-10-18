@@ -575,6 +575,10 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
   long lDeltaTime = 0;
 
   float fDeltaSpeed_l = 0, fDeltaSpeed_r = 0;
+  float fLastDeltaSpeed_l = 0, fLastDeltaSpeed_r = 0;
+
+  float fDeltaAccel_l = 0, fDeltaAccel_r = 0;
+
 
   float fTrackWidth = 150.0f;
   float fDiameterWheel = 64.0f;
@@ -638,11 +642,12 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
         iDeltaTick_r = xSample1.lTickCount_r - xSample1.lLastTickCount_r;
         lDeltaTime = ulTimeStamp - lLastTime;
 
-        fDeltaSpeed_l = iDeltaTick_l - lDeltaTime;
+        fDeltaSpeed_l = fDeltaDistance / lDeltaTime;
+        fDeltaAccel_l = (fDeltaSpeed_l - fLastDeltaSpeed_l) / lDeltaTime;
 
         fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
         fTotalDistance += fDeltaDistance;
-        
+
         if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
         {
           Serial.print(iDeltaTick_l);
@@ -655,7 +660,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
           Serial.print( " | ");
 
 
-          Serial.print(1000 * fDeltaDistance / lDeltaTime);
+          Serial.print(1000 * fDeltaSpeed_l);
           Serial.print( " mm/s ");
           Serial.print(fDeltaDistance);
           Serial.println( " mm");
@@ -671,8 +676,9 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
         xSample1.lLastTickCount_l = xSample1.lTickCount_l;
         xSample1.lLastTickCount_r = xSample1.lTickCount_r;
         lLastTime = ulTimeStamp;
-        //Serial.println("T^");
-        bTriggerSample = false;
+        fLastDeltaSpeed_l = fDeltaSpeed_l
+                            //Serial.println("T^");
+                            bTriggerSample = false;
       }
 
 
