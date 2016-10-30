@@ -37,7 +37,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters );
 void TaskPrintData( void *pvParameters );
 #endif
 
-void TaskRobotTest( void *pvParameters );
+void TaskRobotNAV( void *pvParameters );
 
 void TaskRobotWheelCtrlTest( void *pvParameters );
 
@@ -143,7 +143,7 @@ void setup() {
     Serial.println( xReturned );
 
     xReturned &= xTaskCreate(
-                   TaskRobotTest
+                   TaskRobotNAV
                    ,  (const portCHAR *) "RobotRun"
                    ,  1024  // Stack size
                    ,  NULL
@@ -336,13 +336,13 @@ void TaskStartMotors( void *pvParameters __attribute__((unused)) )  // This is a
   }
 }
 
-void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a Task.
+void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
 
 #define WHEEL_CYCLE_TEST_COUNT ( 20)
 
 
-  Serial.println( "TaskRobotTest" );
+  Serial.println( "TaskRobotNAV" );
 
   AMessage xMessageTickDir;
   xMessageTickDir = DEFAULT_AMESSAGE;
@@ -356,6 +356,11 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
   xMessageTickDir.bHasMotorSpeedUpdated_r = true;
 
   xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
+
+
+  // SET POINT
+  //
+#define SET_POINT__DISTANCE (100.f)
 
   //  char dummy;
   //  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
@@ -379,6 +384,7 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
   long ulTickLastDeltaTime_l = 0, ulTickLastDeltaTime_r = 0;
   long lFirstDeltaTime_l = 0, lFirstDeltaTime_r = 0;
 
+  long ulTimeStamp = millis();
 
   // Odometry
   //float PI = 3.14159f;
@@ -386,28 +392,49 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
 
   //long lTicks_l = 0, lTicks_r = 0; // mLeftEncoder; mRightEncoder;
   //long lLastTicks_l = 0, lLastTicks_r = 0; //int mPreviousLeftCounts; int mPreviousRightCounts;
-  float fDistancePerCount;
-  float fRadiansPerCount;
+
+
   float mX = 0.0f;
   float mY = 0.0f;
   float mHeading = 0.0f;
   //int mPeriod;
-  //long ulTickDeltaTime_l = 0, ulTickDeltaTime_r = 0;
 
-  //  fdistancePerCount = PI * diameterWheel / countsPerRevolution;
-  //  fdeltaDistance = (leftCounts + rightCounts) / 2.0 * distancePerCount;
-  //  countsPerRotation = (trackWidth / wheelDiameter) * countsPerRevolution;
-  //  radiansPerCount = Pi * (wheelDiameter / trackWidth) / countsPerRevolution;
-  //  deltaHeading = (rightCounts leftCounts) * radiansPerCount;
-  //  deltaX = deltaDistance * cos(heading);
-  //  deltaY = deltaDistance * sin(heading);
+  int iDeltaTick_l = 0, iDeltaTick_r = 0;
+  long lLastTime = 0;
+  long lDeltaTime = 0;
+
+  float fDeltaSpeed = 0;
+  float fLastDeltaSpeed = 0;
+
+  float fDeltaAccel = 0;
+
+  float fDeltaSpeed_l = 0, fDeltaSpeed_r = 0;
+  float fLastDeltaSpeed_l = 0, fLastDeltaSpeed_r = 0;
+
+  float fDeltaAccel_l = 0, fDeltaAccel_r = 0;
+
+
+  float fTrackWidth = 150.0f;
+  float fDiameterWheel = 64.0f;
+  float fCountPerRev = 20.0f;
+
+  // Odometry var
+  float fDistancePerCount = PI * fDiameterWheel / fCountPerRev;
+  float fTotalDistance = 0;
+  float fDeltaDistance = 0; //(leftCounts + rightCounts) / 2.0 * fDistancePerCount;
+  float fCountsPerRotation = (fTrackWidth / fDiameterWheel) * fCountPerRev;
+  float fRadiansPerCount = PI * (fDiameterWheel / fTrackWidth) / fCountPerRev;
+  float fHeading = 0.0f;
+  float fDeltaHeading = 0;//(rightCounts leftCounts) * fRadiansPerCount;
+  float fDeltaX = fDeltaDistance * cos(fHeading);
+  float fDeltaY = fDeltaDistance * sin(fHeading);
 
   for (;;) // A Task shall never return or exit.
   {
 
     if ( true == bHasUpdated)
     {
-      // #warning loop broken
+      //#warning loop broken
       xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
       //      xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_SPEED;
       //      xMessageTickDir.bHasMotorSpeedUpdated_r = true;
@@ -435,59 +462,86 @@ void TaskRobotTest( void *pvParameters __attribute__((unused)) )  // This is a T
       lTicks_l = lTicks_l == 0 ? 1 : lTicks_l;
       lTicks_r = lTicks_r == 0 ? 1 : lTicks_r;
 
-      if ( ( lTicks_l % WHEEL_CYCLE_TEST_COUNT ) == 0 )
+      ////////////////////////////////////////////////////////////////////////////////////
+
+      iDeltaTick_l = lTicks_l - lLastTicks_l;
+      iDeltaTick_r = lTicks_l - lLastTicks_l;
+      lDeltaTime = ulTimeStamp - lLastTime;
+
+      fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
+      fTotalDistance += fDeltaDistance;
+
+      fDeltaSpeed = fDeltaDistance / lDeltaTime;
+      fDeltaAccel = (fDeltaSpeed - fLastDeltaSpeed) / lDeltaTime;
+
+      if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
       {
+        Serial.print(iDeltaTick_l);
+        Serial.print( ", ");
+
+        Serial.print(iDeltaTick_r);
+        Serial.print( ", ");
+
+        Serial.print(fTotalDistance);
+        Serial.print( " | ");
+
+
+        Serial.print(1000 * fDeltaSpeed);
+        Serial.print( " mm/s ");
+        Serial.print(fDeltaDistance);
+        Serial.println( " mm");
+      }
+
+      // Perform Odometry calc
+      //fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
+      //fHeading = 0.0f;
+      fDeltaHeading = (-iDeltaTick_l + iDeltaTick_r) * fRadiansPerCount;
+      fDeltaX = fDeltaDistance * cos(fHeading);
+      fDeltaY = fDeltaDistance * sin(fHeading);
+
+      lLastTicks_l = lTicks_l;
+      lLastTicks_r = lTicks_r;
+
+      lLastTime = ulTimeStamp;
+      fLastDeltaSpeed = fDeltaSpeed;
+
+
+      ////////////////////////////////////////////////////////////////////////////////////
+
+      //PID
+      if (SET_POINT__DISTANCE < fTotalDistance)
+      {
+
+        xMessageTickDir.bResetAll = false;
+
+        xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_MAX_SPEED;
+        xMessageTickDir.bHasMotorSpeedUpdated_l = true;
+
+
+
+        xMessageTickDir.bResetAll = false;
+
+        xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_MAX_SPEED;
+        xMessageTickDir.bHasMotorSpeedUpdated_r = true;
 
         bHasUpdated = true;
 
-        iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
-        iRndSpeed = iRndSpeed < 150 ? 150 : iRndSpeed;
-        iRndSpeed = iRndSpeed > 255 ? 255 : iRndSpeed;
-
-        cPosNeg = (char)random(0, 1) == 0 ? 1 : -1;
-        // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
-
+      }
+      else
+      {
         xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_l = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
-        Serial.println("[SL]");
 
-        lLastTicks_l = lTicks_l;
-
-        bCheckFirstTick = true;
-
-        ulTickLastDeltaTime_l = ulTickDeltaTime_l;
-
-      }
-
-
-      if ( ( lTicks_r % WHEEL_CYCLE_TEST_COUNT ) == 0 )
-      {
-
-        bHasUpdated = true;
-        //#if (0 == USE_PRINTER_TASK)
-        //#endif
-        iRndSpeed = random(iRndSpeed - 50, iRndSpeed + 50);
-        iRndSpeed = iRndSpeed < 150 ? 150 : iRndSpeed;
-        iRndSpeed = iRndSpeed > 255 ? 255 : iRndSpeed;
-
-        cPosNeg = (char)random(0, 1) == 0 ? 1 : -1;
-        // iRndSpeed *= (int)cPosNeg;//random(0,1)==0 ? 1 : -1
 
         xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_r = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_r = true;
-        Serial.println("[SR]");
 
-        lLastTicks_r = lTicks_r;
-
-        bCheckFirstTick = true;
-
-        ulTickLastDeltaTime_r = ulTickDeltaTime_r;
-
+        bHasUpdated = true;
       }
 #warning printer is off
       //xQueueSendToFront( xPrintQueue, &( xMessageTickDir ), 0 );
@@ -570,31 +624,6 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
   xSample1.cTickDir_l = 1;
   xSample1.cTickDir_r = 1;
 
-  int iDeltaTick_l = 0, iDeltaTick_r = 0;
-  long lLastTime = 0;
-  long lDeltaTime = 0;
-
-  float fDeltaSpeed_l = 0, fDeltaSpeed_r = 0;
-  float fLastDeltaSpeed_l = 0, fLastDeltaSpeed_r = 0;
-
-  float fDeltaAccel_l = 0, fDeltaAccel_r = 0;
-
-
-  float fTrackWidth = 150.0f;
-  float fDiameterWheel = 64.0f;
-  float fCountPerRev = 20.0f;
-
-  // Odometry var
-  float fDistancePerCount = PI * fDiameterWheel / fCountPerRev;
-  float fTotalDistance = 0;
-  float fDeltaDistance = 0; //(leftCounts + rightCounts) / 2.0 * fDistancePerCount;
-  float fCountsPerRotation = (fTrackWidth / fDiameterWheel) * fCountPerRev;
-  float fRadiansPerCount = PI * (fDiameterWheel / fTrackWidth) / fCountPerRev;
-  float fHeading = 0.0f;
-  float fDeltaHeading = 0;//(rightCounts leftCounts) * fRadiansPerCount;
-  float fDeltaX = fDeltaDistance * cos(fHeading);
-  float fDeltaY = fDeltaDistance * sin(fHeading);
-
   for (;;) // A Task shall never return or exit.
   {
 
@@ -638,47 +667,18 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     {
       if (true == bTriggerSample)
       {
-        iDeltaTick_l = xSample1.lTickCount_l - xSample1.lLastTickCount_l;
-        iDeltaTick_r = xSample1.lTickCount_r - xSample1.lLastTickCount_r;
-        lDeltaTime = ulTimeStamp - lLastTime;
 
-        fDeltaSpeed_l = fDeltaDistance / lDeltaTime;
-        fDeltaAccel_l = (fDeltaSpeed_l - fLastDeltaSpeed_l) / lDeltaTime;
 
-        fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
-        fTotalDistance += fDeltaDistance;
+        //Serial.println("T^");
+        bTriggerSample = false;
 
-        if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
+        if (true == hasUpdated) // might introduce timing gap : A BUG
         {
-          Serial.print(iDeltaTick_l);
-          Serial.print( ", ");
-
-          Serial.print(iDeltaTick_r);
-          Serial.print( ", ");
-
-          Serial.print(fTotalDistance);
-          Serial.print( " | ");
-
-
-          Serial.print(1000 * fDeltaSpeed_l);
-          Serial.print( " mm/s ");
-          Serial.print(fDeltaDistance);
-          Serial.println( " mm");
+          xQueueSendToFront( xTickQueue, &( xMessageTick ), 0 );
+          hasUpdated = false;
         }
 
-        // Perform Odometry calc
-        fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
-        //fHeading = 0.0f;
-        fDeltaHeading = (-iDeltaTick_l + iDeltaTick_r) * fRadiansPerCount;
-        fDeltaX = fDeltaDistance * cos(fHeading);
-        fDeltaY = fDeltaDistance * sin(fHeading);
 
-        xSample1.lLastTickCount_l = xSample1.lTickCount_l;
-        xSample1.lLastTickCount_r = xSample1.lTickCount_r;
-        lLastTime = ulTimeStamp;
-        fLastDeltaSpeed_l = fDeltaSpeed_l
-                            //Serial.println("T^");
-                            bTriggerSample = false;
       }
 
 
@@ -713,11 +713,6 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
     }
 
 
-    if (true == hasUpdated)
-    {
-      xQueueSendToFront( xTickQueue, &( xMessageTick ), 0 );
-      hasUpdated = false;
-    }
 
   }
 
