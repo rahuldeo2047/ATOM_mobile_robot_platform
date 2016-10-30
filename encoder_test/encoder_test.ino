@@ -106,6 +106,8 @@ QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue, xMotorQueue, xSampleQueue,
 void setup() {
 
   Serial.begin(250000);
+  Serial1.begin(38400);
+
   Serial.println( "HELLO WORLD !" );
 
   // Setup the button with an internal pull-up :
@@ -115,6 +117,16 @@ void setup() {
   pinMode(12, OUTPUT); // For encoder power
   digitalWrite(11, HIGH);
   digitalWrite(12, HIGH);
+  pinMode(A0, OUTPUT); // For encoder power
+  digitalWrite(A0, LOW);
+  pinMode(A1, OUTPUT); // For encoder power
+  digitalWrite(A1, LOW);
+
+
+  pinMode(A8, OUTPUT); // For bluetooth power
+  digitalWrite(A8, LOW);
+
+  delay(100);
 
   robot_begin();
 
@@ -122,6 +134,7 @@ void setup() {
 
   // Setup the LED :
   pinMode(LED_PIN, OUTPUT);
+
 
   Serial.println(sizeof(AMessage));
 
@@ -254,40 +267,54 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
 
   for (;;) // A Task shall never return or exit.
   {
-//    xMessage3 = DEFAULT_AMESSAGE;
-//    if (xQueueReceive( xPrintQueue, &xMessage3, 0 ))
-//    {
-//      //Serial.print("t");
-//      Serial.print( xMessage3.ulTickTimeStamp_l );
-//      Serial.print("\t");
-//      Serial.print( xMessage3.ulTickDeltaTime_l );
-//      Serial.print("\t");
-//      Serial.print( xMessage3.lTickCount_l );
-//      Serial.print("\t");
-//      Serial.print( (int)xMessage3.cTickDir_l );
-//      Serial.print("\t|\t");
-//      Serial.print( xMessage3.ulTickTimeStamp_r );
-//      Serial.print("\t");
-//      Serial.print( xMessage3.ulTickDeltaTime_r );
-//      Serial.print("\t");
-//      Serial.print( xMessage3.lTickCount_r );
-//      Serial.print("\t");
-//      Serial.println( (int)xMessage3.cTickDir_r );
-//    }
+    //    xMessage3 = DEFAULT_AMESSAGE;
+    //    if (xQueueReceive( xPrintQueue, &xMessage3, 0 ))
+    //    {
+    //      //Serial.print("t");
+    //      Serial.print( xMessage3.ulTickTimeStamp_l );
+    //      Serial.print("\t");
+    //      Serial.print( xMessage3.ulTickDeltaTime_l );
+    //      Serial.print("\t");
+    //      Serial.print( xMessage3.lTickCount_l );
+    //      Serial.print("\t");
+    //      Serial.print( (int)xMessage3.cTickDir_l );
+    //      Serial.print("\t|\t");
+    //      Serial.print( xMessage3.ulTickTimeStamp_r );
+    //      Serial.print("\t");
+    //      Serial.print( xMessage3.ulTickDeltaTime_r );
+    //      Serial.print("\t");
+    //      Serial.print( xMessage3.lTickCount_r );
+    //      Serial.print("\t");
+    //      Serial.println( (int)xMessage3.cTickDir_r );
+    //    }
 
     if (xQueueReceive( xNavQueue, &xbMessage, portMAX_DELAY ))
     {
-      Serial.print(xbMessage.lDetlaTick_l); Serial.print("\t");
-      Serial.print(xbMessage.lDetlaTick_r); Serial.print("\t");
-      Serial.print(xbMessage.lDetaTime); Serial.print("\t");
-      Serial.print(xbMessage.fDeltaDistance); Serial.print("\t");
-      Serial.print(xbMessage.fTotalDistance); Serial.print("\t");
-      Serial.print(xbMessage.fDeltaHeading); Serial.print("\t");
-      Serial.print(xbMessage.fTotalHeading); Serial.print("\t");
-      Serial.print(xbMessage.fDeltaPosX); Serial.print("\t");
-      Serial.print(xbMessage.fDeltaPosY); Serial.print("\t");
-      Serial.print(xbMessage.fPosX); Serial.print("\t");
+      Serial.print(xbMessage.lDetlaTick_l);         Serial.print("\t");
+      Serial.print(xbMessage.lDetlaTick_r);         Serial.print("\t");
+      Serial.print(xbMessage.lDetaTime);            Serial.print("\t");
+      Serial.print(xbMessage.fDeltaDistance);       Serial.print("\t");
+      Serial.print(xbMessage.fTotalDistance);       Serial.print("\t");
+      Serial.print(xbMessage.fDeltaHeading);        Serial.print("\t");
+      Serial.print(xbMessage.fTotalHeading);        Serial.print("\t");
+      Serial.print(xbMessage.fDeltaPosX);           Serial.print("\t");
+      Serial.print(xbMessage.fDeltaPosY);           Serial.print("\t");
+      Serial.print(xbMessage.fPosX);                Serial.print("\t");
       Serial.println(xbMessage.fPosY);
+
+      // For bluetooth at UART1
+      Serial1.print(xbMessage.lDetlaTick_l);        Serial1.print("\t");
+      Serial1.print(xbMessage.lDetlaTick_r);        Serial1.print("\t");
+      Serial1.print(xbMessage.lDetaTime);           Serial1.print("\t");
+      Serial1.print(xbMessage.fDeltaDistance);      Serial1.print("\t");
+      Serial1.print(xbMessage.fTotalDistance);      Serial1.print("\t");
+      Serial1.print(xbMessage.fDeltaHeading);       Serial1.print("\t");
+      Serial1.print(xbMessage.fTotalHeading);       Serial1.print("\t");
+      Serial1.print(xbMessage.fDeltaPosX);          Serial1.print("\t");
+      Serial1.print(xbMessage.fDeltaPosY);          Serial1.print("\t");
+      Serial1.print(xbMessage.fPosX);               Serial1.print("\t");
+      Serial1.println(xbMessage.fPosY);
+
     }
 
   }
@@ -555,23 +582,23 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       xQueueSendToFront( xNavQueue , &xbMessage, 0 );
 
 
-//            //if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
-//            {
-//              Serial.print(iDeltaTick_l);
-//              Serial.print( ", ");
-//      
-//              Serial.print(iDeltaTick_r);
-//              Serial.print( ", ");
-//      
-//              Serial.print(fTotalDistance);
-//              Serial.print( " | ");
-//      
-//      
-//              Serial.print(1000 * fDeltaSpeed);
-//              Serial.print( " mm/s ");
-//              Serial.print(fDeltaDistance);
-//              Serial.println( " mm");
-//            }
+      //            //if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
+      //            {
+      //              Serial.print(iDeltaTick_l);
+      //              Serial.print( ", ");
+      //
+      //              Serial.print(iDeltaTick_r);
+      //              Serial.print( ", ");
+      //
+      //              Serial.print(fTotalDistance);
+      //              Serial.print( " | ");
+      //
+      //
+      //              Serial.print(1000 * fDeltaSpeed);
+      //              Serial.print( " mm/s ");
+      //              Serial.print(fDeltaDistance);
+      //              Serial.println( " mm");
+      //            }
 
 
       lLastTicks_l = lTicks_l;
