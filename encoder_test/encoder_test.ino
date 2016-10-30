@@ -296,6 +296,12 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
       if ( true == xMessageTickDir.bHasMotorSpeedUpdated_l )
       {
         xMessageTickDir.bHasMotorSpeedUpdated_l = false;
+
+          // Is mapping / clipping good here ? 
+          // Motor doesn't run below WHEEL_CYCLE_TEST_MIN_SPEED 
+        xMessageTickDir.iMotorSpeed_l = xMessageTickDir.iMotorSpeed_l < -WHEEL_CYCLE_TEST_MAX_SPEED ? -WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_l;
+        xMessageTickDir.iMotorSpeed_l = xMessageTickDir.iMotorSpeed_l > WHEEL_CYCLE_TEST_MAX_SPEED ? WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_l;
+
         robot_wheel(LEFT, xMessageTickDir.iMotorSpeed_l , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         //Serial.println("[SL^]");
         //xMessageTickDir.bResetAll = true;
@@ -305,6 +311,11 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
       if ( true == xMessageTickDir.bHasMotorSpeedUpdated_r )
       {
         xMessageTickDir.bHasMotorSpeedUpdated_r = false;
+
+        xMessageTickDir.iMotorSpeed_r = xMessageTickDir.iMotorSpeed_r < -WHEEL_CYCLE_TEST_MAX_SPEED ? -WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_r;
+        xMessageTickDir.iMotorSpeed_r = xMessageTickDir.iMotorSpeed_r > WHEEL_CYCLE_TEST_MAX_SPEED ? WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_r;
+
+
         robot_wheel(RIGHT, xMessageTickDir.iMotorSpeed_r , &xMessageTickDir.cTickDir_l, &xMessageTickDir.cTickDir_r );
         //Serial.println("[SR^]");
         //xMessageTickDir.bResetAll = true;
@@ -349,10 +360,10 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
 
   xMessageTickDir.bResetAll = false;
 
-  xMessageTickDir.iMotorSpeed_l = -WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_SPEED;
   xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
-  xMessageTickDir.iMotorSpeed_r = -WHEEL_CYCLE_TEST_SPEED;
+  xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_SPEED;
   xMessageTickDir.bHasMotorSpeedUpdated_r = true;
 
   xQueueSendToFront( xMotorQueue , &xMessageTickDir, portMAX_DELAY );
@@ -360,7 +371,7 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
 
   // SET POINT
   //
-#define SET_POINT__DISTANCE (100.f)
+#define SET_POINT__DISTANCE (300.f)
 
   //  char dummy;
   //  robot_wheel(LEFT, WHEEL_CYCLE_TEST_SPEED, &dummy, &dummy);
@@ -456,6 +467,8 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
     if (xQueueReceive( xTickQueue, &xMessageTickDir, portMAX_DELAY ))
     {
 
+      ulTimeStamp = millis();
+
       lTicks_l = xMessageTickDir.lTickCount_l;
       lTicks_r = xMessageTickDir.lTickCount_r;
 
@@ -474,7 +487,7 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       fDeltaSpeed = fDeltaDistance / lDeltaTime;
       fDeltaAccel = (fDeltaSpeed - fLastDeltaSpeed) / lDeltaTime;
 
-      if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
+      //if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
       {
         Serial.print(iDeltaTick_l);
         Serial.print( ", ");
@@ -509,19 +522,25 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       ////////////////////////////////////////////////////////////////////////////////////
 
       //PID
-      if (SET_POINT__DISTANCE < fTotalDistance)
+      if (SET_POINT__DISTANCE > fTotalDistance)
       {
 
+#define PROPORTIONAL ( 1.5f )
+
+        int iPID_err = ( SET_POINT__DISTANCE - fTotalDistance );
+        //int proportional = ( SET_POINT__DISTANCE - fTotalDistance );
+        //int proportional = ( SET_POINT__DISTANCE - fTotalDistance );
+
         xMessageTickDir.bResetAll = false;
 
-        xMessageTickDir.iMotorSpeed_l = WHEEL_CYCLE_TEST_MAX_SPEED;
+        xMessageTickDir.iMotorSpeed_l = PROPORTIONAL * iPID_err ;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
-
+        //Serial.println( "^SP");
 
         xMessageTickDir.bResetAll = false;
 
-        xMessageTickDir.iMotorSpeed_r = WHEEL_CYCLE_TEST_MAX_SPEED;
+        xMessageTickDir.iMotorSpeed_r = PROPORTIONAL * iPID_err ;
         xMessageTickDir.bHasMotorSpeedUpdated_r = true;
 
         bHasUpdated = true;
@@ -529,14 +548,14 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       }
       else
       {
-        xMessageTickDir.bResetAll = false;
+        xMessageTickDir.bResetAll = true;
 
         xMessageTickDir.iMotorSpeed_l = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
+        Serial.println( "^SP");
 
-
-        xMessageTickDir.bResetAll = false;
+        xMessageTickDir.bResetAll = true;
 
         xMessageTickDir.iMotorSpeed_r = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_r = true;
