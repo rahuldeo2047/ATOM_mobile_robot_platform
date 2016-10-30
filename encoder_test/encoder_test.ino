@@ -68,11 +68,23 @@ struct AMessage
   int iMotorSpeed_l;
   int iMotorSpeed_r;
 
-} xMessage;
+};
+
+struct BMessage
+{
+  long lDetlaTick_l, lDetlaTick_r;
+  long lDetaTime;
+  float fDeltaDistance;
+  float fTotalDistance;
+  float fDeltaHeading;
+  float fTotalHeading;
+  float fDeltaPosX, fDeltaPosY;
+  float fPosX, fPosY;
+};
 
 #define DEFAULT_AMESSAGE { 0,0,0,0,0,0,0,0,false, false, false, 0, 0 };
 
-QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue, xMotorQueue, xSampleQueue;
+QueueHandle_t xPrintQueue, xTickQueue, xTickDirQueue, xMotorQueue, xSampleQueue, xNavQueue;
 
 /*
   DESCRIPTION
@@ -121,6 +133,7 @@ void setup() {
   xTickDirQueue  = xQueueCreate( 5, sizeof( AMessage) );
   xMotorQueue = xQueueCreate( 5, sizeof( AMessage) );
   xSampleQueue = xQueueCreate( 1, sizeof( boolean) );
+  xNavQueue = xQueueCreate( 1, sizeof( BMessage) );
 
   if (
 #if (1 == USE_PRINTER_TASK)
@@ -130,6 +143,7 @@ void setup() {
     && (xTickDirQueue != NULL)
     && (xMotorQueue != NULL)
     && (xSampleQueue != NULL)
+    && (xNavQueue != NULL)
   )
   {
     // Now set up two Tasks to run independently.
@@ -236,28 +250,46 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
 
   //Serial.println( "TaskPrintData" );
   AMessage xMessage3;
+  BMessage xbMessage;
 
   for (;;) // A Task shall never return or exit.
   {
-    xMessage3 = DEFAULT_AMESSAGE;
-    xQueueReceive( xPrintQueue, &xMessage3, portMAX_DELAY );
+//    xMessage3 = DEFAULT_AMESSAGE;
+//    if (xQueueReceive( xPrintQueue, &xMessage3, 0 ))
+//    {
+//      //Serial.print("t");
+//      Serial.print( xMessage3.ulTickTimeStamp_l );
+//      Serial.print("\t");
+//      Serial.print( xMessage3.ulTickDeltaTime_l );
+//      Serial.print("\t");
+//      Serial.print( xMessage3.lTickCount_l );
+//      Serial.print("\t");
+//      Serial.print( (int)xMessage3.cTickDir_l );
+//      Serial.print("\t|\t");
+//      Serial.print( xMessage3.ulTickTimeStamp_r );
+//      Serial.print("\t");
+//      Serial.print( xMessage3.ulTickDeltaTime_r );
+//      Serial.print("\t");
+//      Serial.print( xMessage3.lTickCount_r );
+//      Serial.print("\t");
+//      Serial.println( (int)xMessage3.cTickDir_r );
+//    }
 
-    //Serial.print("t");
-    Serial.print( xMessage3.ulTickTimeStamp_l );
-    Serial.print("\t");
-    Serial.print( xMessage3.ulTickDeltaTime_l );
-    Serial.print("\t");
-    Serial.print( xMessage3.lTickCount_l );
-    Serial.print("\t");
-    Serial.print( (int)xMessage3.cTickDir_l );
-    Serial.print("\t|\t");
-    Serial.print( xMessage3.ulTickTimeStamp_r );
-    Serial.print("\t");
-    Serial.print( xMessage3.ulTickDeltaTime_r );
-    Serial.print("\t");
-    Serial.print( xMessage3.lTickCount_r );
-    Serial.print("\t");
-    Serial.println( (int)xMessage3.cTickDir_r );
+    if (xQueueReceive( xNavQueue, &xbMessage, portMAX_DELAY ))
+    {
+      Serial.print(xbMessage.lDetlaTick_l); Serial.print("\t");
+      Serial.print(xbMessage.lDetlaTick_r); Serial.print("\t");
+      Serial.print(xbMessage.lDetaTime); Serial.print("\t");
+      Serial.print(xbMessage.fDeltaDistance); Serial.print("\t");
+      Serial.print(xbMessage.fTotalDistance); Serial.print("\t");
+      Serial.print(xbMessage.fDeltaHeading); Serial.print("\t");
+      Serial.print(xbMessage.fTotalHeading); Serial.print("\t");
+      Serial.print(xbMessage.fDeltaPosX); Serial.print("\t");
+      Serial.print(xbMessage.fDeltaPosY); Serial.print("\t");
+      Serial.print(xbMessage.fPosX); Serial.print("\t");
+      Serial.println(xbMessage.fPosY);
+    }
+
   }
 
 }
@@ -297,8 +329,8 @@ void TaskRobotWheelCtrlTest( void *pvParameters __attribute__((unused)) )  // Th
       {
         xMessageTickDir.bHasMotorSpeedUpdated_l = false;
 
-          // Is mapping / clipping good here ? 
-          // Motor doesn't run below WHEEL_CYCLE_TEST_MIN_SPEED 
+        // Is mapping / clipping good here ?
+        // Motor doesn't run below WHEEL_CYCLE_TEST_MIN_SPEED
         xMessageTickDir.iMotorSpeed_l = xMessageTickDir.iMotorSpeed_l < -WHEEL_CYCLE_TEST_MAX_SPEED ? -WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_l;
         xMessageTickDir.iMotorSpeed_l = xMessageTickDir.iMotorSpeed_l > WHEEL_CYCLE_TEST_MAX_SPEED ? WHEEL_CYCLE_TEST_MAX_SPEED : xMessageTickDir.iMotorSpeed_l;
 
@@ -355,6 +387,7 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
 
   Serial.println( "TaskRobotNAV" );
 
+  BMessage xbMessage; // reuse it for odometry
   AMessage xMessageTickDir;
   xMessageTickDir = DEFAULT_AMESSAGE;
 
@@ -440,6 +473,8 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
   float fDeltaX = fDeltaDistance * cos(fHeading);
   float fDeltaY = fDeltaDistance * sin(fHeading);
 
+  float fPosX = 0, fPosY = 0;
+
   for (;;) // A Task shall never return or exit.
   {
 
@@ -477,6 +512,8 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
 
       ////////////////////////////////////////////////////////////////////////////////////
 
+      // Perform Odometry calc
+
       iDeltaTick_l = lTicks_l - lLastTicks_l;
       iDeltaTick_r = lTicks_l - lLastTicks_l;
       lDeltaTime = ulTimeStamp - lLastTime;
@@ -484,33 +521,58 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
       fTotalDistance += fDeltaDistance;
 
-      fDeltaSpeed = fDeltaDistance / lDeltaTime;
-      fDeltaAccel = (fDeltaSpeed - fLastDeltaSpeed) / lDeltaTime;
-
-      //if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
-      {
-        Serial.print(iDeltaTick_l);
-        Serial.print( ", ");
-
-        Serial.print(iDeltaTick_r);
-        Serial.print( ", ");
-
-        Serial.print(fTotalDistance);
-        Serial.print( " | ");
-
-
-        Serial.print(1000 * fDeltaSpeed);
-        Serial.print( " mm/s ");
-        Serial.print(fDeltaDistance);
-        Serial.println( " mm");
-      }
-
-      // Perform Odometry calc
-      //fDeltaDistance = (iDeltaTick_l + iDeltaTick_r) / 2.0 * fDistancePerCount;
-      //fHeading = 0.0f;
       fDeltaHeading = (-iDeltaTick_l + iDeltaTick_r) * fRadiansPerCount;
       fDeltaX = fDeltaDistance * cos(fHeading);
       fDeltaY = fDeltaDistance * sin(fHeading);
+
+      fHeading += fDeltaHeading;
+
+      fPosX += fDeltaX;
+      fPosY += fDeltaY;
+
+      // limit heading to -Pi <= heading < Pi
+      if (fHeading > PI)
+        fHeading -= TWO_PI;
+      else if (fHeading <= -PI)
+        fHeading += TWO_PI;
+
+      fDeltaSpeed = fDeltaDistance / lDeltaTime;
+      fDeltaAccel = (fDeltaSpeed - fLastDeltaSpeed) / lDeltaTime;
+
+
+      xbMessage.lDetlaTick_l = iDeltaTick_l;
+      xbMessage.lDetlaTick_r = iDeltaTick_r;
+      xbMessage.lDetaTime = lDeltaTime;
+      xbMessage.fDeltaDistance = fDeltaDistance;
+      xbMessage.fTotalDistance = fTotalDistance;
+      xbMessage.fDeltaHeading = fDeltaHeading;
+      xbMessage.fTotalHeading = fHeading;
+      xbMessage.fDeltaPosX = fDeltaX;
+      xbMessage.fDeltaPosY = fDeltaY;
+      xbMessage.fPosX = fPosX;
+      xbMessage.fPosY = fPosY;
+
+      xQueueSendToFront( xNavQueue , &xbMessage, 0 );
+
+
+//            //if ( 1 < ( abs(iDeltaTick_l) + abs(iDeltaTick_r) ))
+//            {
+//              Serial.print(iDeltaTick_l);
+//              Serial.print( ", ");
+//      
+//              Serial.print(iDeltaTick_r);
+//              Serial.print( ", ");
+//      
+//              Serial.print(fTotalDistance);
+//              Serial.print( " | ");
+//      
+//      
+//              Serial.print(1000 * fDeltaSpeed);
+//              Serial.print( " mm/s ");
+//              Serial.print(fDeltaDistance);
+//              Serial.println( " mm");
+//            }
+
 
       lLastTicks_l = lTicks_l;
       lLastTicks_r = lTicks_r;
@@ -548,14 +610,14 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       }
       else
       {
-        xMessageTickDir.bResetAll = true;
+        xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_l = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_l = true;
 
         Serial.println( "^SP");
 
-        xMessageTickDir.bResetAll = true;
+        xMessageTickDir.bResetAll = false;
 
         xMessageTickDir.iMotorSpeed_r = 0;
         xMessageTickDir.bHasMotorSpeedUpdated_r = true;
