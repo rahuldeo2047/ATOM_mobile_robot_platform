@@ -236,6 +236,7 @@ void loop()
 void vTimerCallback( TimerHandle_t xTimer )
 {
   uint32_t ulCount;
+  AMessage xMessageReset = DEFAULT_AMESSAGE;
 
   /* Optionally do something if the pxTimer parameter is NULL. */
   configASSERT( pxTimer );
@@ -253,6 +254,67 @@ void vTimerCallback( TimerHandle_t xTimer )
 
   boolean bTriggerSample = true;
   xQueueSendToFront( xSampleQueue, &( bTriggerSample ), 0 );
+
+  switch (Serial1.read())
+  {
+    case 'A' :
+      {
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_l = 0 ;
+        xMessageReset.bHasMotorSpeedUpdated_l = true;
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_r = 0 ;
+        xMessageReset.bHasMotorSpeedUpdated_r = true;
+
+        xQueueSendToFront( xMotorQueue , &xMessageReset, portMAX_DELAY );
+
+      } break;
+    case 'B' :
+      {
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_l = 200 ;
+        xMessageReset.bHasMotorSpeedUpdated_l = true;
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_r = 200 ;
+        xMessageReset.bHasMotorSpeedUpdated_r = true;
+
+        xQueueSendToFront( xMotorQueue , &xMessageReset, portMAX_DELAY );
+
+      } break;
+    case 'C' :
+      {
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_l = -200 ;
+        xMessageReset.bHasMotorSpeedUpdated_l = true;
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_r = 200 ;
+        xMessageReset.bHasMotorSpeedUpdated_r = true;
+
+        xQueueSendToFront( xMotorQueue , &xMessageReset, portMAX_DELAY );
+
+      } break;
+    case 'D' :
+      {
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_l = 200 ;
+        xMessageReset.bHasMotorSpeedUpdated_l = true;
+
+        xMessageReset.bResetAll = true;
+        xMessageReset.iMotorSpeed_r = -200 ;
+        xMessageReset.bHasMotorSpeedUpdated_r = true;
+
+        xQueueSendToFront( xMotorQueue , &xMessageReset, portMAX_DELAY );
+
+      } break;
+
+    default: break;
+  }
   //Serial.print("T"), Serial.println(ulCount);
 
 }
