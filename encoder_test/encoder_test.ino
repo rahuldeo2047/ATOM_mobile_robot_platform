@@ -14,6 +14,8 @@
 //#include <timers.h>
 //#include <task.h>
 
+#include "data.h"
+
 #include <Bounce2.h>
 
 #include <Arduino_FreeRTOS.h>
@@ -28,6 +30,14 @@ enum WHEEL
   RIGHT,
   BOTH
 };
+
+/*
+
+   Multiple MPU.ino struct defination
+
+*/
+// typedef struct true_angle_val_raw_acc
+
 
 #define USE_PRINTER_TASK (1)
 // define two Tasks for DigitalRead & AnalogRead
@@ -126,6 +136,8 @@ void setup() {
   pinMode(A8, OUTPUT); // For bluetooth power
   digitalWrite(A8, LOW);
 
+  mpu_setup();
+
   delay(100);
 
   robot_begin();
@@ -187,26 +199,47 @@ void setup() {
                    ,  &xHandleTaskRobotWheelCtrlTest );
     Serial.println( xReturned );
 
-    TimerHandle_t xBlockTime = xTimerCreate
-                               ( /* Just a text name, not used by the RTOS
+    TimerHandle_t xBlockTime1 = xTimerCreate
+                                ( /* Just a text name, not used by the RTOS
                      kernel. */
-                                 "Timer",
-                                 /* The timer period in ticks, must be
-                                   greater than 0. */
-                                 5,
-                                 /* The timers will auto-reload themselves
-                                   when they expire. */
-                                 pdTRUE,
-                                 /* The ID is used to store a count of the
-                                   number of times the timer has expired, which
-                                   is initialised to 0. */
-                                 ( void * ) 0,
-                                 /* Each timer calls the same callback when
-                                   it expires. */
-                                 vTimerCallback
-                               );
+                                  "Timer1",
+                                  /* The timer period in ticks, must be
+                                    greater than 0. */
+                                  5,
+                                  /* The timers will auto-reload themselves
+                                    when they expire. */
+                                  pdTRUE,
+                                  /* The ID is used to store a count of the
+                                    number of times the timer has expired, which
+                                    is initialised to 0. */
+                                  ( void * ) 0,
+                                  /* Each timer calls the same callback when
+                                    it expires. */
+                                  vTimer1Callback
+                                );
 
-    xReturned &= xTimerStart(xBlockTime, TickType_t(10));
+    TimerHandle_t xBlockTime2 = xTimerCreate
+                                ( /* Just a text name, not used by the RTOS
+                     kernel. */
+                                  "Timer2",
+                                  /* The timer period in ticks, must be
+                                    greater than 0. */
+                                  5,
+                                  /* The timers will auto-reload themselves
+                                    when they expire. */
+                                  pdTRUE,
+                                  /* The ID is used to store a count of the
+                                    number of times the timer has expired, which
+                                    is initialised to 0. */
+                                  ( void * ) 0,
+                                  /* Each timer calls the same callback when
+                                    it expires. */
+                                  vTimer2Callback
+                                );
+
+    xReturned &= xTimerStart(xBlockTime1, TickType_t(10));
+    xReturned &= xTimerStart(xBlockTime2, TickType_t(10));
+
     Serial.println( xReturned );
 
 #if (1 == USE_PRINTER_TASK)
@@ -233,7 +266,7 @@ void loop()
 
 }
 
-void vTimerCallback( TimerHandle_t xTimer )
+void vTimer1Callback( TimerHandle_t xTimer )
 {
   uint32_t ulCount;
   AMessage xMessageReset = DEFAULT_AMESSAGE;
@@ -319,6 +352,25 @@ void vTimerCallback( TimerHandle_t xTimer )
 
 }
 
+
+void vTimer2Callback( TimerHandle_t xTimer )
+{
+  static unsigned long ulLastTimeStamp = 0;
+  unsigned long ulTimeStamp = millis();
+  //Serial.println(ulTimeStamp - ulLastTimeStamp);
+  ulLastTimeStamp = ulTimeStamp;
+
+   // Performance issue if kept here
+    true_angle_val_raw_acc data = mpu_loop(); // Must update here too
+
+#define SERIAL Serial1
+    SERIAL.print(data.x_angle, 2); SERIAL.print(",");
+    SERIAL.print(data.y_angle, 2); SERIAL.print(",");
+    SERIAL.print(data.z_angle, 2); SERIAL.print(",");
+    SERIAL.print(data.x_unfiltered_acc, 2); SERIAL.print(",");
+    SERIAL.print(data.y_unfiltered_acc, 2); SERIAL.print(",");
+    SERIAL.println(data.z_unfiltered_acc, 2);
+}
 #if (1 == USE_PRINTER_TASK)
 void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a Task.
 {
@@ -365,17 +417,17 @@ void TaskPrintData( void *pvParameters __attribute__((unused)) )  // This is a T
       Serial.println(xbMessage.fPosY);
 
       // For bluetooth at UART1
-      Serial1.print(xbMessage.lDetlaTick_l);        Serial1.print("\t");
-      Serial1.print(xbMessage.lDetlaTick_r);        Serial1.print("\t");
-      Serial1.print(xbMessage.lDetaTime);           Serial1.print("\t");
-      Serial1.print(xbMessage.fDeltaDistance);      Serial1.print("\t");
-      Serial1.print(xbMessage.fTotalDistance);      Serial1.print("\t");
-      Serial1.print(xbMessage.fDeltaHeading);       Serial1.print("\t");
-      Serial1.print(xbMessage.fTotalHeading);       Serial1.print("\t");
-      Serial1.print(xbMessage.fDeltaPosX);          Serial1.print("\t");
-      Serial1.print(xbMessage.fDeltaPosY);          Serial1.print("\t");
-      Serial1.print(xbMessage.fPosX);               Serial1.print("\t");
-      Serial1.println(xbMessage.fPosY);
+      //      Serial1.print(xbMessage.lDetlaTick_l);        Serial1.print("\t");
+      //      Serial1.print(xbMessage.lDetlaTick_r);        Serial1.print("\t");
+      //      Serial1.print(xbMessage.lDetaTime);           Serial1.print("\t");
+      //      Serial1.print(xbMessage.fDeltaDistance);      Serial1.print("\t");
+      //      Serial1.print(xbMessage.fTotalDistance);      Serial1.print("\t");
+      //      Serial1.print(xbMessage.fDeltaHeading);       Serial1.print("\t");
+      //      Serial1.print(xbMessage.fTotalHeading);       Serial1.print("\t");
+      //      Serial1.print(xbMessage.fDeltaPosX);          Serial1.print("\t");
+      //      Serial1.print(xbMessage.fDeltaPosY);          Serial1.print("\t");
+      //      Serial1.print(xbMessage.fPosX);               Serial1.print("\t");
+      //      Serial1.println(xbMessage.fPosY);
 
     }
 
@@ -567,6 +619,8 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
   for (;;) // A Task shall never return or exit.
   {
 
+    //true_angle_val_raw_acc data = mpu_loop(); // Must update here too
+
     if ( true == bHasUpdated)
     {
       //#warning loop broken
@@ -628,6 +682,18 @@ void TaskRobotNAV( void *pvParameters __attribute__((unused)) )  // This is a Ta
       fDeltaSpeed = fDeltaDistance / lDeltaTime;
       fDeltaAccel = (fDeltaSpeed - fLastDeltaSpeed) / lDeltaTime;
 
+
+
+      /* MPU data
+
+      */
+      //#define SERIAL Serial1
+      //      SERIAL.print(data.x_angle, 2); SERIAL.print(",");
+      //      SERIAL.print(data.y_angle, 2); SERIAL.print(",");
+      //      SERIAL.print(data.z_angle, 2); SERIAL.print(",");
+      //      SERIAL.print(data.x_unfiltered_acc, 2); SERIAL.print(",");
+      //      SERIAL.print(data.y_unfiltered_acc, 2); SERIAL.print(",");
+      //      SERIAL.println(data.z_unfiltered_acc, 2);
 
       xbMessage.lDetlaTick_l = iDeltaTick_l;
       xbMessage.lDetlaTick_r = iDeltaTick_r;
@@ -796,6 +862,7 @@ void TaskEncoderTicksReadWithDebouncing( void *pvParameters __attribute__((unuse
 
   for (;;) // A Task shall never return or exit.
   {
+   
 
     //xMessageTickDir = DEFAULT_AMESSAGE;
     xSample1.debouncer_l.update();

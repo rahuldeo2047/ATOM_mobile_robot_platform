@@ -30,6 +30,7 @@
 //      Register 0x75 (WHO_AM_I)   = 0x68.
 //
 
+#include "data.h"
 #include <Wire.h>
 
 
@@ -660,6 +661,8 @@ typedef union accel_t_gyro_union
     int z_gyro;
   } value;
 };
+ 
+true_angle_val_raw_acc data;
 
 // Use the following global variables and access functions to help store the overall
 // rotation angle of the sensor
@@ -845,7 +848,7 @@ void mpu_setup()
 }
 
 
-void mpu_loop()
+true_angle_val_raw_acc mpu_loop()
 {
   int error;
   double dT;
@@ -949,6 +952,14 @@ void mpu_loop()
   // Update the saved data with the latest values
   set_last_read_angle_data(t_now, angle_x, angle_y, angle_z, unfiltered_gyro_angle_x, unfiltered_gyro_angle_y, unfiltered_gyro_angle_z);
 
+
+  data.x_angle = angle_x;
+  data.y_angle = angle_y;
+  data.z_angle = angle_z;
+  data.x_unfiltered_acc = accel_x;
+  data.y_unfiltered_acc = accel_y;
+  data.z_unfiltered_acc = accel_z;
+/*  
   // Send the data to the serial port
   Serial.print(F("DEL:"));              //Delta T
   Serial.print(dt, DEC);
@@ -971,9 +982,11 @@ void mpu_loop()
   Serial.print(F(","));
   Serial.print(angle_z, 2);
   Serial.println(F(""));
-
+*/
   // Delay so we don't swamp the serial port
-  delay(5);
+  //delay(5);
+
+  return data;
 }
 
 
